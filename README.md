@@ -2,16 +2,16 @@
 
 Browser-based real-time multiplayer cube-counting party game.
 
-## Quick start
+## Quick start (Local Development)
 
 ```bash
 npm install
 npm run dev
 ```
 
-- Client: http://127.0.0.1:5173  
-- Server WS: ws://127.0.0.1:8081/ws  
-- Health: http://127.0.0.1:8081/healthz  
+- **Client:** http://127.0.0.1:5173
+- **Server WS:** ws://127.0.0.1:8091/ws
+- **Health:** http://127.0.0.1:8091/healthz
 
 Open two tabs → Create room / Join with code, or **Practice solo**.
 
@@ -25,20 +25,52 @@ npm run build
 
 | Layer | Choice |
 |-------|--------|
-| Client | Three.js 0.172 + TypeScript + esbuild (no framework) |
+| Client | Three.js 0.172 + Vanilla TypeScript + esbuild (no framework) |
 | Server | Node 20 + `ws` |
 | Shared | Protocol types, gridgen, scoring |
-| Deploy | Hostinger VPS, Nginx, systemd (via n8n-shell) |
+| Deploy | Hostinger VPS run via systemd & OpenLiteSpeed |
+
+## Production Deployment (VPS)
+
+**Live URL:** https://villa.linkflow.page/pacecubs/
+
+The application runs on a VPS without Docker or PM2, utilizing `systemd` to keep the backend alive and `OpenLiteSpeed` to serve the static frontend and proxy WebSocket traffic.
+
+### Architecture
+- **Frontend (Static):** Served by OpenLiteSpeed from `/home/villa.linkflow.page/public_html/pacecubs/`
+- **Backend (Node):** Managed by `systemd` (`pacecubs.service`), running from `/opt/pacecubs/server.js` on internal port `8091`.
+- **WebSocket Proxy:** OpenLiteSpeed is configured to route `/pacecubs/ws` -> `127.0.0.1:8091`.
+
+### Deployment Procedure
+
+Build the production artifacts locally and verify constraints:
+
+```bash
+npm ci
+npm run ci
+```
+
+Push the frontend and backend artifacts to the remote VPS using `scp`:
+
+```bash
+# 1. Update the backend bundle
+scp dist/server.js samantha@31.97.182.123:/opt/pacecubs/server.js
+
+# 2. Update the frontend static files
+scp dist/public/* samantha@31.97.182.123:/home/villa.linkflow.page/public_html/pacecubs/
+
+# 3. Restart the backend service
+ssh samantha@31.97.182.123 "sudo systemctl restart pacecubs.service && sudo systemctl status pacecubs.service --no-pager"
+```
 
 ## Protocol
 
-See `shared/src/protocol.ts` and BRD §7.
+See `shared/src/protocol.ts` and BRD § 7.
 
 ## Decisions appendix
 
-- **Logger:** minimal JSON stdout logger instead of `pino` to honor runtime deps ceiling (`ws` only on server). Justification recorded per §5.3 / NFR-7.
-- **Dev WS:** on port 5173, client connects to `:8081/ws` directly.
-- **M5 deploy:** requires `n8n-shell` skill — if unavailable, build artifacts are ready under `dist/` for manual deploy.
+- **Logger:** minimal JSON stdout logger instead of `pino` to honor runtime deps ceiling (`ws` only on server). Justification recorded per § 5.3 / NFR-7.
+- **Client Bundle:** UI redesign replaced generic forms with a mechanical precision-arcade style. Strict budget size kept < 500 KB gzip limit (currently ~130 KB). 
 
 ## License
 

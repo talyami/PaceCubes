@@ -9,6 +9,9 @@ export class FlipCounter {
   constructor() {
     this.el = document.createElement("div");
     this.el.className = "flip-counter";
+    this.el.setAttribute("role", "status");
+    this.el.setAttribute("aria-live", "polite");
+    this.el.setAttribute("aria-label", "Count: 0");
     this.d0 = this.digitEl();
     this.d1 = this.digitEl();
     this.el.append(this.d0, this.d1);
@@ -30,6 +33,8 @@ export class FlipCounter {
     if (n === this.value) return;
     this.render(n, animate);
     this.value = n;
+    this.el.dataset.value = String(n);
+    this.el.setAttribute("aria-label", `Count: ${n}`);
   }
 
   get(): number {
@@ -62,6 +67,8 @@ export class FlipCounter {
     this.el.innerHTML = "";
     this.el.className = "locked-numeral";
     this.el.textContent = String(n);
+    this.el.dataset.value = String(n);
+    this.el.setAttribute("aria-label", `Locked count: ${n}`);
     this.value = n;
   }
 
@@ -73,5 +80,6 @@ export class FlipCounter {
     this.el.append(this.d0, this.d1);
     this.value = -1;
     this.set(0, false);
+    this.el.setAttribute("aria-label", "Count: 0");
   }
 }

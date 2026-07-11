@@ -116,13 +116,15 @@ export class GameScene {
 
   resize(): void {
     const canvas = this.renderer.domElement;
-    const parent = canvas.parentElement ?? document.body;
-    // Game HUD is 60vh; canvas is positioned fixed to match
-    const w = window.innerWidth;
-    const h = window.innerHeight * 0.6;
+    const stage = document.getElementById("game-stage");
+    const rect = stage?.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect?.width ?? window.innerWidth));
+    const h = Math.max(1, Math.floor(rect?.height ?? window.innerHeight * 0.6));
     this.renderer.setSize(w, h, false);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
+    canvas.style.left = `${Math.floor(rect?.left ?? 0)}px`;
+    canvas.style.top = `${Math.floor(rect?.top ?? 0)}px`;
 
     const aspect = w / Math.max(h, 1);
     const base = 5.5;

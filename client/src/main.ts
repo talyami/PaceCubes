@@ -40,6 +40,8 @@ let roundOutcomes = new Map<string, ("exact" | "closest" | "none")[]>();
 let optimisticCount = 0;
 let flip: FlipCounter | null = null;
 let irisEl: HTMLElement | null = null;
+let phaseText = "";
+let phaseDigit = "";
 
 loadLang();
 loadMute();
@@ -87,7 +89,7 @@ function confettiBurst(): void {
   const layer = document.createElement("div");
   layer.className = "confetti";
   document.body.append(layer);
-  const colors = ["#34d434", "#222", "#e6a100", "#4af", "#f66"];
+  const colors = ["#34d434", "#222222", "#c8c8c8", "#f4f4f8"];
   for (let i = 0; i < 40; i++) {
     const s = document.createElement("span");
     s.style.left = `${Math.random() * 100}%`;
@@ -134,43 +136,79 @@ function saveName(n: string): void {
 
 /* ─── Screens ─── */
 
+function renderRail(section: string): string {
+  return `
+    <header class="app-rail">
+      <div class="rail-brand" aria-label="Pace Cubs">
+        <span class="mini-cube" aria-hidden="true"></span>
+        <strong>PACE CUBS</strong>
+      </div>
+      <span class="rail-section">${section}</span>
+      <div class="rail-tools">
+        <button id="lang" class="rail-button ${getLang() === "zh-CN" ? "active" : ""}" aria-label="Change language">${getLang() === "zh-CN" ? "中文" : "EN"}</button>
+        <button id="mute" class="rail-button" aria-label="${isMuted() ? t("soundOff") : t("soundOn")}" aria-pressed="${isMuted()}">${isMuted() ? "SND OFF" : "SND ON"}</button>
+      </div>
+    </header>
+  `;
+}
+
+function wireRail(el: HTMLElement): void {
+  el.querySelector("#lang")?.addEventListener("click", () => {
+    setLang(getLang() === "en" ? "zh-CN" : "en");
+    render();
+  });
+  el.querySelector("#mute")?.addEventListener("click", () => {
+    setMuted(!isMuted());
+    render();
+  });
+}
+
 function renderHome(): void {
   const urlRoom = new URLSearchParams(location.search).get("room") ?? "";
   app.innerHTML = "";
   const el = $(`
     <div class="screen" id="home">
-      <h1 class="brand">Pace Cubs</h1>
-      <p class="tagline">${t("intro")}</p>
-      <div class="error-banner hidden" id="err"></div>
-      <div class="field">
-        <label>${t("name")}</label>
-        <input id="name" maxlength="16" value="${nameDefault()}" autocomplete="nickname" />
-      </div>
-      <div class="field">
-        <label>${t("roomCode")}</label>
-        <input id="code" maxlength="4" value="${urlRoom}" style="text-transform:uppercase;letter-spacing:0.15em" />
-      </div>
-      <div class="btn-row">
-        <button id="btn-create">${t("create")}</button>
-        <button id="btn-join" class="secondary">${t("join")}</button>
-        <button id="btn-practice" class="secondary">${t("practice")}</button>
-      </div>
-      <div class="toggles">
-        <button id="lang" class="${getLang() === "zh-CN" ? "active" : ""}">${getLang() === "zh-CN" ? "中文" : "EN"}</button>
-        <button id="mute">${isMuted() ? t("soundOff") : t("soundOn")}</button>
-      </div>
+      ${renderRail(t("home"))}
+      <main class="home-layout">
+        <section class="home-hero" aria-labelledby="home-title">
+          <p class="eyebrow">MULTIPLAYER COUNTING LAB · 01</p>
+          <h1 class="brand brand-stack" id="home-title"><span>PACE</span><span>CUBS</span></h1>
+          <p class="hero-challenge">${t("challenge")}</p>
+          <p class="tagline">${t("intro")}</p>
+          <div class="cube-stack" aria-hidden="true">
+            <i class="cube cube-a"></i>
+            <i class="cube cube-b"></i>
+            <i class="cube cube-c"></i>
+            <i class="cube cube-d"></i>
+            <span class="cube-index">05×05</span>
+          </div>
+        </section>
+
+        <section class="entry-console" aria-label="${t("create")}">
+          <div class="console-heading">
+            <span>PLAYER SETUP</span>
+            <span>READY / SET / COUNT</span>
+          </div>
+          <div class="error-banner hidden" id="err" role="alert"></div>
+          <div class="field">
+            <label for="name">${t("name")}</label>
+            <input id="name" maxlength="16" value="${escapeHtml(nameDefault())}" autocomplete="nickname" />
+          </div>
+          <button id="btn-create" class="primary-action">${t("create")} <span aria-hidden="true">↗</span></button>
+          <div class="join-group">
+            <div class="field code-field">
+              <label for="code">${t("roomCode")}</label>
+              <input id="code" maxlength="4" value="${escapeHtml(urlRoom)}" autocomplete="off" autocapitalize="characters" />
+            </div>
+            <button id="btn-join" class="secondary join-action">${t("join")} <span aria-hidden="true">→</span></button>
+          </div>
+          <button id="btn-practice" class="text-action">${t("practice")} <span aria-hidden="true">＋</span></button>
+        </section>
+      </main>
     </div>
   `);
   app.append(el);
-
-  el.querySelector("#lang")!.addEventListener("click", () => {
-    setLang(getLang() === "en" ? "zh-CN" : "en");
-    render();
-  });
-  el.querySelector("#mute")!.addEventListener("click", () => {
-    setMuted(!isMuted());
-    render();
-  });
+  wireRail(el);
 
   const getName = () =>
     (el.querySelector("#name") as HTMLInputElement).value.trim();
@@ -216,41 +254,92 @@ function renderHome(): void {
 
 let pendingPractice = false;
 
+function playerInitial(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? "?";
+}
+
 function renderLobby(): void {
   if (!room) return;
   const amHost = room.hostId === myId;
   app.innerHTML = "";
   const players = room.players
-    .map((p) => {
+    .map((p, index) => {
       const badges: string[] = [];
-      if (p.id === room!.hostId) badges.push(`<span class="badge host">host</span>`);
+      if (p.id === room!.hostId) badges.push(`<span class="badge host">${t("host")}</span>`);
+      if (p.id === myId) badges.push(`<span class="badge you">${t("you")}</span>`);
       if (p.ready) badges.push(`<span class="badge ready">${t("ready")}</span>`);
-      if (!p.connected) badges.push(`<span class="badge off">…</span>`);
-      return `<li><span>${escapeHtml(p.name)}${p.id === myId ? " (you)" : ""}</span><span>${badges.join(" ")}</span></li>`;
+      if (!p.connected) badges.push(`<span class="badge off">${t("offline")}</span>`);
+      const stateClasses = [
+        p.ready ? "is-ready" : "",
+        p.connected ? "" : "is-offline",
+        p.id === myId ? "is-you" : "",
+      ].filter(Boolean).join(" ");
+      return `
+        <li class="player-seat ${stateClasses}">
+          <span class="seat-number">${String(index + 1).padStart(2, "0")}</span>
+          <span class="seat-marker" aria-hidden="true">${escapeHtml(playerInitial(p.name))}</span>
+          <span class="seat-identity">
+            <strong>${escapeHtml(p.name)}</strong>
+            <small>${p.ready ? t("ready") : t("notReady")}${p.id === room!.hostId ? ` · ${t("host")}` : ""}${p.id === myId ? ` · ${t("you")}` : ""}</small>
+          </span>
+          <span class="seat-badges">${badges.join("")}</span>
+        </li>
+      `;
     })
     .join("");
 
   const me = room.players.find((p) => p.id === myId);
   const el = $(`
     <div class="screen" id="lobby">
-      <p style="text-align:center;color:var(--muted);font-weight:700;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em">${t("roomCode")}</p>
-      <div class="room-code">${room.code}</div>
-      <button id="copy" class="secondary" style="align-self:center;padding:0.5rem 1rem;font-size:0.85rem">${t("copyLink")}</button>
-      <ul class="player-list">${players}</ul>
-      <p style="text-align:center;color:var(--muted);font-size:0.9rem">${t("waiting")}</p>
-      <div class="btn-row">
-        <button id="ready">${me?.ready ? "✓ " : ""}${t("ready")}</button>
-        ${amHost ? `<button id="start">${t("start")}</button>` : ""}
-      </div>
+      ${renderRail(t("lobby"))}
+      <main class="lobby-layout">
+        <section class="room-hero" aria-labelledby="room-label">
+          <div class="room-heading">
+            <p class="eyebrow" id="room-label">${t("roomCode")}</p>
+            <span class="live-mark"><i></i> LIVE ROOM</span>
+          </div>
+          <button id="copy" class="room-code" aria-label="${t("copyLink")}: ${room.code}">
+            <span>${room.code}</span>
+            <small>${t("copyLink")} <b aria-hidden="true">↗</b></small>
+          </button>
+          <p class="waiting-copy"><strong>${t("waiting")}</strong> ${t("waitingHint")}</p>
+        </section>
+
+        <section class="lobby-board">
+          <div class="section-heading">
+            <span>PLAYERS / ${room.players.length.toString().padStart(2, "0")}</span>
+            <span>MAX 08</span>
+          </div>
+          <ul class="player-list">${players}</ul>
+        </section>
+
+        <aside class="rhythm-card" aria-labelledby="rhythm-title">
+          <p class="eyebrow" id="rhythm-title">${t("howItWorks")}</p>
+          <ol>
+            <li><b>01</b><span>${t("see")}</span></li>
+            <li><b>02</b><span>${t("count")}</span></li>
+            <li><b>03</b><span>${t("commit")}</span></li>
+          </ol>
+        </aside>
+
+        <section class="lobby-actions">
+          <button id="ready" class="${me?.ready ? "is-ready" : ""}">
+            <span>${me?.ready ? "✓" : "○"}</span>
+            ${me?.ready ? t("ready") : t("notReady")}
+          </button>
+          ${amHost ? `<button id="start" class="start-action">${t("start")} <span aria-hidden="true">→</span></button>` : ""}
+        </section>
+      </main>
     </div>
   `);
   app.append(el);
+  wireRail(el);
 
   el.querySelector("#copy")!.addEventListener("click", async () => {
     const url = `${location.origin}${location.pathname}?room=${room!.code}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast("Copied!");
+      toast(t("copied"));
     } catch {
       toast(url);
     }
@@ -272,32 +361,58 @@ function escapeHtml(s: string): string {
 }
 
 function renderGame(): void {
-  ensureScene();
   app.innerHTML = "";
+  const canAnswer = room?.state === "ANSWER" && !ownLocked;
   const el = $(`
     <div class="screen game-screen">
-      <div class="game-hud">
-        <div class="phase-title" id="phase-title"></div>
-        <div class="big-digit" id="big-digit"></div>
-        <div class="flank left" id="flank-l"></div>
-        <div class="flank right" id="flank-r"></div>
-      </div>
-      <div class="control-deck">
-        <div class="opponents-row" id="opponents"></div>
-        <div class="own-counter-wrap" id="own-wrap"></div>
-        <div class="control-btns">
-          <button class="btn-plus" id="btn-plus">${t("plusOne")}</button>
-          <button class="btn-lock" id="btn-lock">${t("lock")}</button>
-        </div>
-      </div>
+      ${renderRail(t("game"))}
+      <main class="game-layout">
+        <section class="stage-zone" id="game-stage" aria-label="${t("question")}">
+          <div class="stage-coordinates" aria-hidden="true"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span></div>
+          <div class="game-hud">
+            <div class="phase-meta">
+              <span>${t("round")} ${room?.round ?? 0} / ${room?.rounds ?? 7}</span>
+              <span>05 × 05 GRID</span>
+            </div>
+            <div class="phase-title" id="phase-title" aria-live="polite"></div>
+            <div class="big-digit" id="big-digit" aria-live="polite"></div>
+            <div class="flank left" id="flank-l"></div>
+            <div class="flank right" id="flank-r"></div>
+            <div class="reveal-roster" id="reveal-roster" aria-live="polite"></div>
+            <div class="score-strip-slot" id="score-strip-slot"></div>
+          </div>
+        </section>
+
+        <aside class="control-deck" aria-label="${t("yourCount")}">
+          <div class="console-heading">
+            <span>COUNT CONSOLE</span>
+            <span class="key-hint">${t("pressKey")}</span>
+          </div>
+          <section class="opponent-panel" aria-label="${t("opponents")}">
+            <p class="console-label">${t("opponents")}</p>
+            <div class="opponents-row" id="opponents"></div>
+          </section>
+          <section class="own-panel">
+            <p class="console-label">${t("yourCount")}</p>
+            <div class="own-counter-wrap" id="own-wrap"></div>
+          </section>
+          <div class="control-btns">
+            <button class="btn-plus" id="btn-plus" ${canAnswer ? "" : "disabled"}><small>TAP / SPACE</small><strong>${t("plusOne")}</strong></button>
+            <button class="btn-lock" id="btn-lock" ${canAnswer ? "" : "disabled"}><small>COMMIT</small><strong>${t("lock")}</strong></button>
+          </div>
+        </aside>
+      </main>
     </div>
   `);
   app.append(el);
+  wireRail(el);
 
   flip = new FlipCounter();
   flip.set(optimisticCount, false);
   el.querySelector("#own-wrap")!.append(flip.el);
   updateOpponents();
+  ensureScene().resize();
+  setPhaseTitle(phaseText, phaseDigit);
 
   const plus = el.querySelector("#btn-plus") as HTMLButtonElement;
   const lockBtn = el.querySelector("#btn-lock") as HTMLButtonElement;
@@ -353,21 +468,51 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
-function updateOpponents(): void {
+function updateOpponents(results?: RoundResult[]): void {
   const row = document.getElementById("opponents");
   if (!row || !room) return;
-  row.innerHTML = room.players
+  const opponents = room.players
     .filter((p) => p.id !== myId)
     .map((p) => {
-      const v = counters.get(p.id) ?? 0;
-      const lk = locked.has(p.id) ? ` · ${t("locked")}` : "";
-      const off = p.connected ? "" : " ✗";
-      return `<span>${escapeHtml(p.name)}: ${room!.hideOpponentCount && !locked.has(p.id) ? "?" : v}${lk}${off}</span>`;
+      const result = results?.find((r) => r.playerId === p.id);
+      const v = result?.value ?? counters.get(p.id) ?? 0;
+      const isLocked = result !== undefined || locked.has(p.id);
+      const shownValue =
+        room!.hideOpponentCount && !isLocked && !result ? "?" : String(v).padStart(2, "0");
+      const status = result
+        ? result.outcome === "exact"
+          ? t("exact")
+          : result.outcome === "closest"
+            ? t("closest")
+            : t("locked")
+        : isLocked
+          ? t("locked")
+          : p.connected
+            ? t("count")
+            : t("offline");
+      const classes = [
+        "opponent-tile",
+        isLocked ? "is-locked" : "",
+        p.connected ? "" : "is-offline",
+        result?.outcome === "exact" ? "is-exact" : "",
+        result?.outcome === "closest" ? "is-closest" : "",
+      ].filter(Boolean).join(" ");
+      return `
+        <article class="${classes}">
+          <span class="opponent-marker">${escapeHtml(playerInitial(p.name))}</span>
+          <span class="opponent-name">${escapeHtml(p.name)}</span>
+          <strong>${shownValue}</strong>
+          <small>${status}</small>
+        </article>
+      `;
     })
     .join("");
+  row.innerHTML = opponents || `<p class="solo-opponent">SOLO / PRACTICE</p>`;
 }
 
 function setPhaseTitle(text: string, digit = ""): void {
+  phaseText = text;
+  phaseDigit = digit;
   const title = document.getElementById("phase-title");
   const dig = document.getElementById("big-digit");
   if (title) title.textContent = text;
@@ -399,21 +544,51 @@ function renderFinal(): void {
       const sparks = outcomes
         .map((o) => `<i class="${o}"></i>`)
         .join("");
-      return `<li><span>${i + 1}</span><span>${escapeHtml(p.name)}<div class="spark">${sparks}</div></span><span>${score}</span></li>`;
+      return `
+        <li class="${winnerIds.includes(p.id) ? "is-winner" : ""}">
+          <span class="rank-number">${String(i + 1).padStart(2, "0")}</span>
+          <span class="score-player">
+            <span class="seat-marker" aria-hidden="true">${escapeHtml(playerInitial(p.name))}</span>
+            <span><strong>${escapeHtml(p.name)}</strong><small>${p.id === myId ? t("you") : ""}</small></span>
+          </span>
+          <span class="spark" aria-label="${t("matchLedger")}">${sparks}</span>
+          <strong class="score-total">${String(score).padStart(2, "0")}</strong>
+        </li>
+      `;
     })
     .join("");
 
   const el = $(`
     <div class="screen" id="final">
-      <h1 class="brand" style="font-size:1.75rem">${headline}</h1>
-      <ul class="scoreboard">${rows}</ul>
-      <div class="btn-row">
-        ${amHost ? `<button id="rematch">${t("rematch")}</button>` : ""}
-        <button id="new" class="secondary">${t("newRoom")}</button>
-      </div>
+      ${renderRail(t("results"))}
+      <main class="final-layout">
+        <header class="winner-hero">
+          <p class="eyebrow">MATCH COMPLETE · FINAL LEDGER</p>
+          <div class="podium-mark" aria-hidden="true"><span>1</span></div>
+          <h1 class="final-headline">${headline}</h1>
+          <p>${room.round} ${t("round").toLowerCase()} · ${room.players.length.toString().padStart(2, "0")} ${t("player").toLowerCase()}</p>
+        </header>
+
+        <section class="ledger" aria-labelledby="ledger-title">
+          <div class="section-heading" id="ledger-title">
+            <span>${t("matchLedger")}</span>
+            <span>PACE CUBS / 01</span>
+          </div>
+          <div class="ledger-labels" aria-hidden="true">
+            <span>${t("rank")}</span><span>${t("player")}</span><span>ROUNDS</span><span>${t("score")}</span>
+          </div>
+          <ol class="scoreboard">${rows}</ol>
+        </section>
+
+        <div class="final-actions">
+          ${amHost ? `<button id="rematch" class="primary-action">${t("rematch")} <span aria-hidden="true">↻</span></button>` : ""}
+          <button id="new" class="secondary">${t("newRoom")} <span aria-hidden="true">→</span></button>
+        </div>
+      </main>
     </div>
   `);
   app.append(el);
+  wireRail(el);
   el.querySelector("#rematch")?.addEventListener("click", () => {
     net.send({ t: "rematch" });
   });
@@ -689,11 +864,27 @@ async function handleReveal(
     fr.textContent = String(others[0].value);
     fr.classList.add("visible");
   }
-  // More players: show in opponents row
+  const roster = document.getElementById("reveal-roster");
+  if (roster) {
+    roster.innerHTML = msg.results
+      .map((result) => {
+        const player = room?.players.find((p) => p.id === result.playerId);
+        const name = player?.name ?? result.playerId;
+        return `
+          <span class="${result.outcome} ${result.playerId === myId ? "is-you" : ""}">
+            <small>${escapeHtml(name)}</small>
+            <strong>${result.value}</strong>
+          </span>
+        `;
+      })
+      .join("");
+    roster.classList.add("visible");
+  }
 
   setPhaseTitle(t("question"), "0");
   answerStartedAt = 0;
   if (room) room = { ...room, state: "REVEAL" };
+  updateOpponents(msg.results);
 
   const sc = ensureScene();
   await sc.animateReveal(msg.grid, msg.order, (filled) => {
@@ -710,6 +901,7 @@ async function handleReveal(
   await sleep(1500);
   fl?.classList.remove("visible");
   fr?.classList.remove("visible");
+  roster?.classList.remove("visible");
 
   // Intermission score strip
   setPhaseTitle("", "");
@@ -718,10 +910,10 @@ async function handleReveal(
   strip.innerHTML = msg.scores
     .map((s) => {
       const name = room?.players.find((p) => p.id === s.playerId)?.name ?? s.playerId;
-      return `<span>${escapeHtml(name)}: ${s.score}</span>`;
+      return `<span><small>${escapeHtml(name)}</small><strong>${String(s.score).padStart(2, "0")}</strong></span>`;
     })
     .join("");
-  document.querySelector(".game-hud")?.append(strip);
+  document.getElementById("score-strip-slot")?.append(strip);
   await sleep(2000);
   strip.remove();
 

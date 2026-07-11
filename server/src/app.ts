@@ -6,9 +6,8 @@ import { WebSocketServer, type WebSocket } from "ws";
 import {
   VERSION,
   type C2S,
-  type Lang,
   type S2C,
-} from "@pacecubs/shared";
+} from "@yamicuberush/shared";
 import { Analytics } from "./analytics.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { log } from "./log.js";
@@ -238,8 +237,6 @@ export async function createApp(opts: AppOptions = {}): Promise<App> {
             return;
           }
           const room = created;
-          if (msg.lang === "en" || msg.lang === "zh-CN")
-            room.lang = msg.lang as Lang;
           const player = room.addPlayer(name, ws);
           if ("error" in player) {
             send(ws, player.error);
@@ -251,7 +248,15 @@ export async function createApp(opts: AppOptions = {}): Promise<App> {
         }
 
         case "joinRoom": {
-          const code = (msg.code ?? "").toUpperCase().trim();
+          const code = (msg.code ?? "").trim();
+          if (!/^\d{2}$/.test(code)) {
+            send(ws, {
+              t: "error",
+              code: "BAD_ROOM_CODE",
+              msg: "Room code must be exactly two digits",
+            });
+            return;
+          }
           const room = rooms.get(code);
           if (!room) {
             send(ws, {
@@ -277,8 +282,9 @@ export async function createApp(opts: AppOptions = {}): Promise<App> {
             if (
               msg.t === "ready" ||
               msg.t === "startMatch" ||
-              msg.t === "press" ||
+              msg.t === "adjust" ||
               msg.t === "lock" ||
+              msg.t === "endMatch" ||
               msg.t === "rematch" ||
               msg.t === "leave" ||
               msg.t === "sync"

@@ -1,0 +1,15 @@
+[Unit]
+Description=YAMI CUBE RUSH game server
+After=network.target
+
+[Service]
+User=samantha
+WorkingDirectory=/opt/yamicuberush
+EnvironmentFile=/opt/yamicuberush/.env
+ExecStart=/usr/bin/node /opt/yamicuberush/server.js
+Restart=always
+RestartSec=2
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

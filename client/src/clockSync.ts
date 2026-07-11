@@ -2,7 +2,7 @@ import {
   CLOCK_BURST_COUNT,
   CLOCK_BURST_GAP_MS,
   CLOCK_REFRESH_MS,
-} from "@pacecubs/shared";
+} from "@yamicuberush/shared";
 import type { Net } from "./net.js";
 
 interface Sample {

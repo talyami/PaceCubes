@@ -10,21 +10,21 @@ export const MAX_SUDDEN_DEATH = 3;
 export const MIN_PLAYERS = 1;
 export const MAX_PLAYERS = 8;
 
-export const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ";
-export const ROOM_CODE_LENGTH = 4;
+export const ROOM_CODE_ALPHABET = "0123456789";
+export const ROOM_CODE_LENGTH = 2;
 export const NAME_MAX_LEN = 16;
 
 export const EMPTY_ROOM_TTL_MS = 60_000;
 export const IDLE_LOBBY_TTL_MS = 30 * 60_000;
 export const SEAT_DISCONNECT_TTL_MS = 60_000;
 
-export const INTRO_STEP_MS = 1000;
-export const INTRO_STEPS = 3;
+export const MATCH_INTRO_MS = 800;
 export const COUNTDOWN_MS = 3000;
 export const SLIDE_IN_MS = 600;
 export const SLIDE_STAGGER_MS = 40;
 export const VANISH_MS = 250;
-export const ANSWER_TIMEOUT_MS = 20_000;
+export const ROUND_HOLD_INCREMENT_MS = 2000;
+export const ANSWER_TIMEOUT_MS = 10_000;
 export const REVEAL_CUBE_MS = 120;
 export const REVEAL_HOLD_MS = 1500;
 export const INTERMISSION_MS = 2000;

@@ -4,6 +4,7 @@ export interface ScoreInput {
   playerId: string;
   value: number;
   lockAt: number | null; // null = timeout auto-lock (treated as late)
+  connected?: boolean;
 }
 
 /**
@@ -53,6 +54,7 @@ export function scoreRound(
       error: g.error,
       points,
       outcome,
+      connected: g.connected ?? true,
     };
   });
 }

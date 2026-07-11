@@ -2,11 +2,13 @@ import * as esbuild from "esbuild";
 import {
   copyFileSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
   existsSync,
   createReadStream,
   statSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import http from "node:http";
@@ -18,14 +20,33 @@ const watch = process.argv.includes("--watch");
 
 mkdirSync(outdir, { recursive: true });
 
-function copyStatic() {
+function assetHash(filePath) {
+  return createHash("sha256")
+    .update(readFileSync(filePath))
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function copyStatic(useHashedAssets = false) {
+  const cssSource = path.join(__dirname, "styles.css");
+  const appSource = path.join(outdir, "app.js");
+  const cssName = useHashedAssets
+    ? `styles.${assetHash(cssSource)}.css`
+    : "styles.css";
+  const appName = useHashedAssets
+    ? `app.${assetHash(appSource)}.js`
+    : "app.js";
+  const index = readFileSync(path.join(__dirname, "index.html"), "utf8")
+    .replace("styles.css", cssName)
+    .replace("app.js", appName);
+  writeFileSync(path.join(outdir, "index.html"), index);
+  copyFileSync(cssSource, path.join(outdir, cssName));
+  if (useHashedAssets) {
+    copyFileSync(appSource, path.join(outdir, appName));
+  }
   copyFileSync(
-    path.join(__dirname, "index.html"),
-    path.join(outdir, "index.html"),
-  );
-  copyFileSync(
-    path.join(__dirname, "styles.css"),
-    path.join(outdir, "styles.css"),
+    path.join(__dirname, ".htaccess"),
+    path.join(outdir, ".htaccess"),
   );
 }
 
@@ -40,13 +61,13 @@ const buildOptions = {
   metafile: true,
   logLevel: "info",
   alias: {
-    "@pacecubs/shared": path.join(root, "shared/src/index.ts"),
+    "@yamicuberush/shared": path.join(root, "shared/src/index.ts"),
   },
 };
 
 async function run() {
-  copyStatic();
   if (watch) {
+    copyStatic();
     const ctx = await esbuild.context(buildOptions);
     await ctx.watch();
     const PORT = 5173;
@@ -78,6 +99,7 @@ async function run() {
       });
   } else {
     const result = await esbuild.build(buildOptions);
+    copyStatic(true);
     if (result.metafile) {
       writeFileSync(
         path.join(root, "dist/client-meta.json"),

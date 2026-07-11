@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import WebSocket from "ws";
 import { createApp, type App } from "../src/app.js";
-import type { S2C } from "@pacecubs/shared";
+import type { S2C } from "@yamicuberush/shared";
 
 class TestClient {
   ws!: WebSocket;
@@ -87,6 +87,7 @@ describe("integration: full match", () => {
     a.send({ t: "createRoom", name: "Alice" });
     const welcomeA = await a.waitFor("welcome");
     const code = welcomeA.room.code;
+    expect(code).toMatch(/^\d{2}$/);
 
     b.send({ t: "joinRoom", code, name: "Bob" });
     await b.waitFor("welcome");
@@ -128,14 +129,14 @@ describe("integration: full match", () => {
 
       const truth = flashA.grid.flat().reduce((s, h) => s + h, 0);
 
-      // flashData arrives at flashAt−300ms; ANSWER starts after slide+hold+vanish
-      await new Promise((r) =>
-        setTimeout(r, 300 + 600 + introA.holdMs + 250 + 150),
-      );
+      await a.waitFor("answerOpen");
+      await b.waitFor("answerOpen");
 
       // A guesses exact, B guesses exact+2
-      for (let i = 0; i < truth; i++) a.send({ t: "press" });
-      for (let i = 0; i < truth + 2; i++) b.send({ t: "press" });
+      for (let i = 0; i < truth; i++)
+        a.send({ t: "adjust", delta: 1, seq: i + 1 });
+      for (let i = 0; i < truth + 2; i++)
+        b.send({ t: "adjust", delta: 1, seq: i + 1 });
       await new Promise((r) => setTimeout(r, 200)); // flush counters
       a.send({ t: "lock" });
       await new Promise((r) => setTimeout(r, 50));
@@ -200,11 +201,11 @@ describe("integration: full match", () => {
 
     await a.waitFor("roundIntro", 30_000);
     const flashA = await a.waitFor("flashData", 30_000);
-    const hold = 1500;
-    // flashData is 300ms before flash; then slide+hold+vanish
-    await new Promise((r) => setTimeout(r, 300 + 600 + hold + 250 + 200));
+    await a.waitFor("answerOpen", 30_000);
+    await b.waitFor("answerOpen", 30_000);
 
-    for (let i = 0; i < 5; i++) b.send({ t: "press" });
+    for (let i = 0; i < 5; i++)
+      b.send({ t: "adjust", delta: 1, seq: i + 1 });
     await new Promise((r) => setTimeout(r, 200));
 
     const room = app.rooms.get(w.room.code)!;
@@ -223,16 +224,89 @@ describe("integration: full match", () => {
     });
     const welcome2 = await b2.waitFor("welcome");
     expect(welcome2.playerId).toBe(idB);
+    const sync = await b2.waitFor("phaseSync");
+    expect(sync.phase).toBe("ANSWER");
+    if (sync.phase === "ANSWER") {
+      expect(sync.answerEndsAt).toBeGreaterThan(sync.serverNow);
+      expect(
+        sync.counters.find((counter) => counter.playerId === idB)?.value,
+      ).toBe(5);
+    }
     expect(room.players.get(idB)!.counter).toBe(5);
     expect(room.players.get(idB)!.connected).toBe(true);
 
     const truth = flashA.grid.flat().reduce((s, h) => s + h, 0);
-    for (let i = 0; i < truth; i++) a.send({ t: "press" });
+    for (let i = 0; i < truth; i++)
+      a.send({ t: "adjust", delta: 1, seq: i + 1 });
     a.send({ t: "lock" });
     b2.send({ t: "lock" });
 
     await a.waitFor("reveal", 30_000);
     a.close();
     b2.close();
+  }, 120_000);
+
+  it("validates codes, reconciles limited adjustments, and retains an offline result", async () => {
+    const invalid = new TestClient(url);
+    await invalid.connect();
+    invalid.send({ t: "joinRoom", code: "A1", name: "Invalid" });
+    const badCode = await invalid.waitFor("error");
+    expect(badCode.code).toBe("BAD_ROOM_CODE");
+    invalid.close();
+
+    const host = new TestClient(url);
+    const guest = new TestClient(url);
+    await host.connect();
+    await guest.connect();
+    host.send({ t: "createRoom", name: "Host" });
+    const welcome = await host.waitFor("welcome");
+    expect(welcome.room.code).toMatch(/^\d{2}$/);
+    guest.send({ t: "joinRoom", code: welcome.room.code, name: "Guest" });
+    await guest.waitFor("welcome");
+
+    guest.send({ t: "ready", ready: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    host.send({ t: "startMatch" });
+    await host.waitFor("answerOpen", 30_000);
+    await guest.waitFor("answerOpen", 30_000);
+
+    guest.send({ t: "endMatch" });
+    const denied = await guest.waitFor("error");
+    expect(denied.code).toBe("NOT_HOST");
+
+    guest.send({ t: "adjust", delta: -1, seq: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const room = app.rooms.get(welcome.room.code)!;
+    expect(room.players.get(guest.playerId)!.counter).toBe(0);
+
+    for (let seq = 1; seq <= 50; seq++) {
+      host.send({ t: "adjust", delta: 1, seq });
+    }
+    for (let seq = 2; seq <= 6; seq++) {
+      guest.send({ t: "adjust", delta: 1, seq });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const authoritativeHost = room.players.get(host.playerId)!.counter;
+    expect(authoritativeHost).toBeGreaterThan(0);
+    expect(authoritativeHost).toBeLessThan(50);
+    expect(room.players.get(host.playerId)!.lastAdjustSeq).toBe(50);
+    expect(room.players.get(guest.playerId)!.counter).toBe(5);
+
+    const guestId = guest.playerId;
+    guest.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    room.dropSeat(guestId);
+    expect(room.players.has(guestId)).toBe(false);
+
+    host.send({ t: "endMatch" });
+    const final = await host.waitFor("matchEnd", 10_000);
+    expect(final.scores.find((score) => score.playerId === host.playerId)?.score)
+      .toBe(0);
+    expect(final.scores.find((score) => score.playerId === guestId)).toMatchObject({
+      connected: false,
+      score: 0,
+    });
+
+    host.close();
   }, 120_000);
 });

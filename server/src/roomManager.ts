@@ -3,21 +3,17 @@ import type { WebSocket } from "ws";
 import {
   EMPTY_ROOM_TTL_MS,
   IDLE_LOBBY_TTL_MS,
-  ROOM_CODE_ALPHABET,
-  ROOM_CODE_LENGTH,
-} from "@pacecubs/shared";
+} from "@yamicuberush/shared";
 import { Analytics } from "./analytics.js";
 import { log } from "./log.js";
 import { Room } from "./room.js";
 import { SlidingWindow } from "./rateLimit.js";
-import { RATE } from "@pacecubs/shared";
+import { RATE } from "@yamicuberush/shared";
 
 function genCode(existing: Set<string>): string {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    let code = "";
-    for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-      code += ROOM_CODE_ALPHABET[randomInt(ROOM_CODE_ALPHABET.length)]!;
-    }
+  const start = randomInt(100);
+  for (let offset = 0; offset < 100; offset++) {
+    const code = String((start + offset) % 100).padStart(2, "0");
     if (!existing.has(code)) return code;
   }
   throw new Error("failed to allocate room code");
@@ -41,7 +37,8 @@ export class RoomManager {
       new SlidingWindow(RATE.roomCreatePerIp.windowMs, RATE.roomCreatePerIp.max);
     this.ipCreates.set(ip, win);
     if (!win.tryTake()) return { error: "RATE_LIMITED" };
-    if (this.rooms.size >= this.maxRooms) return { error: "SERVER_FULL" };
+    if (this.rooms.size >= Math.min(this.maxRooms, 100))
+      return { error: "SERVER_FULL" };
 
     const code = genCode(new Set(this.rooms.keys()));
     const room = new Room(code, this.analytics, {
@@ -54,7 +51,7 @@ export class RoomManager {
   }
 
   get(code: string): Room | undefined {
-    return this.rooms.get(code.toUpperCase());
+    return this.rooms.get(code);
   }
 
   findBySocket(ws: WebSocket): { room: Room } | undefined {

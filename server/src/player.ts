@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
-import { NAME_MAX_LEN, RATE } from "@pacecubs/shared";
+import { NAME_MAX_LEN, RATE } from "@yamicuberush/shared";
 import { TokenBucket } from "./rateLimit.js";
 
 export function sanitizeName(raw: string): string | null {
@@ -25,11 +25,13 @@ export class Player {
   lockAt: number | null = null;
   ws: WebSocket | null;
   lastPong = Date.now();
-  pressBucket = new TokenBucket(RATE.press.rate, RATE.press.burst);
+  adjustBucket = new TokenBucket(RATE.press.rate, RATE.press.burst);
   msgBucket = new TokenBucket(RATE.message.rate, RATE.message.burst);
   joinBucket = new TokenBucket(RATE.join.rate, RATE.join.burst);
   syncCount = 0;
   counterDirty = false;
+  lastAdjustSeq = 0;
+  roundActive = false;
   /** Round history for sparkline: outcome per round */
   roundOutcomes: ("exact" | "closest" | "none")[] = [];
   disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,6 +50,7 @@ export class Player {
       ready: this.ready,
       connected: this.connected,
       score: this.score,
+      outcomes: [...this.roundOutcomes],
     };
   }
 
@@ -56,12 +59,14 @@ export class Player {
     this.locked = false;
     this.lockAt = null;
     this.counterDirty = false;
+    this.lastAdjustSeq = 0;
   }
 
   resetForMatch(): void {
     this.score = 0;
     this.ready = false;
     this.roundOutcomes = [];
+    this.roundActive = false;
     this.resetForRound();
   }
 

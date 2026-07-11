@@ -1,4 +1,4 @@
-/* Pace Cubs — mobile-first, video-faithful palette */
+/* YAMI CUBE RUSH — mobile-first, precision arcade palette */
 :root {
   --bg: #f7f7f5;
   --text: #222222;
@@ -11,7 +11,7 @@
   --btn: #222;
   --btn-fg: #f7f7f5;
   --lock: #555;
-  --font: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font: "Space Grotesk", system-ui, sans-serif;
 }
 
 *,
@@ -38,7 +38,7 @@ body {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: 60vh;
+  height: auto;
   z-index: 0;
   display: none;
   pointer-events: none;
@@ -216,7 +216,7 @@ button:disabled {
 }
 
 .game-hud {
-  height: 60vh;
+  height: auto;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -263,7 +263,7 @@ button:disabled {
 }
 
 .control-deck {
-  height: 40vh;
+  height: auto;
   display: flex;
   flex-direction: column;
   padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
@@ -448,16 +448,22 @@ button:disabled {
 
 .confetti span {
   position: absolute;
-  top: -10px;
+  top: -2rem;
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  animation: fall 1s linear forwards;
+  will-change: transform, opacity;
+  animation: fall 2.4s cubic-bezier(0.15, 0.7, 0.35, 1) forwards;
 }
 
 @keyframes fall {
+  0% {
+    transform: translate3d(0, -8vh, 0) rotate(0);
+    opacity: 1;
+  }
   to {
-    transform: translateY(100vh) rotate(720deg);
+    transform: translate3d(var(--drift, 0), 112vh, 0)
+      rotate(var(--spin, 900deg));
     opacity: 0;
   }
 }
@@ -538,7 +544,7 @@ button:disabled {
   --wipe: #1a1a1a;
   --btn: #222222;
   --btn-fg: #f7f7f5;
-  --font: "Inter", "Noto Sans SC", sans-serif;
+  --font: "Space Grotesk", system-ui, sans-serif;
   --rail-h: 3.75rem;
   --content-max: 78rem;
   --sturdy-radius: 1.25rem;
@@ -938,6 +944,14 @@ h1.brand {
 
 .code-field input {
   letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-field small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -1261,8 +1275,15 @@ button.room-code {
 .lobby-actions {
   grid-area: actions;
   display: grid;
-  grid-template-columns: 1fr 1.4fr;
+  grid-template-columns: 1fr 1fr 1.4fr;
   gap: 0.75rem;
+}
+
+.cancel-action {
+  border-color: var(--danger);
+  background: var(--bg);
+  color: var(--danger);
+  font-weight: 900;
 }
 
 .lobby-actions button {
@@ -1370,6 +1391,35 @@ button.room-code {
   font-weight: 800;
   letter-spacing: -0.03em;
   text-align: center;
+}
+
+.answer-timer {
+  position: absolute;
+  top: 1.85rem;
+  left: 0.85rem;
+  display: flex;
+  gap: 0.45rem;
+  align-items: baseline;
+  padding: 0.28rem 0.42rem;
+  border: 1px solid var(--ink);
+  border-bottom: 0.18rem solid var(--green);
+  border-radius: 0.3rem;
+  background: rgba(247, 247, 245, 0.94);
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-timer span {
+  color: var(--muted);
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.answer-timer strong {
+  min-width: 3.2rem;
+  font-size: 1rem;
+  font-weight: 900;
+  text-align: right;
 }
 
 .big-digit {
@@ -1507,8 +1557,9 @@ button.room-code {
   grid-template-areas:
     "heading heading"
     "opponents own"
-    "buttons buttons";
-  grid-template-rows: auto minmax(4.8rem, auto) minmax(5.6rem, 1fr);
+    "buttons buttons"
+    "admin admin";
+  grid-template-rows: auto minmax(3.8rem, auto) minmax(4.8rem, 1fr) auto;
   gap: 0.5rem 0.85rem;
   min-width: 0;
   min-height: 0;
@@ -1688,7 +1739,7 @@ button.room-code {
 .control-btns {
   grid-area: buttons;
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(7.2rem, 0.8fr);
+  grid-template-columns: minmax(4.3rem, 0.65fr) minmax(0, 1.65fr) minmax(6.5rem, 0.85fr);
   gap: 0.65rem;
   min-height: 0;
 }
@@ -1722,6 +1773,16 @@ button.room-code {
   color: var(--bg);
 }
 
+.btn-minus {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.btn-minus:active:not(:disabled) {
+  background: #e3e3df;
+  box-shadow: inset 0 0.28rem 0 var(--line);
+}
+
 .btn-plus:not(:disabled)::after {
   position: absolute;
   top: 0.55rem;
@@ -1749,6 +1810,30 @@ button.room-code {
   background: rgba(165, 50, 50, 0.1);
   color: #762222;
   font-size: 0.82rem;
+}
+
+.round-admin {
+  grid-area: admin;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.round-admin button {
+  min-height: 2.75rem;
+  padding: 0.45rem 0.75rem;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.score-strip .is-offline,
+.reveal-roster .is-offline,
+.scoreboard .is-offline {
+  opacity: 0.62;
 }
 
 /* Results */
@@ -1992,7 +2077,7 @@ button.room-code {
 }
 
 .confetti {
-  z-index: 3;
+  z-index: 90;
 }
 
 .confetti span {
@@ -2070,13 +2155,13 @@ button.room-code {
   }
 
   .rail-brand {
-    font-size: 0.64rem;
+    font-size: 0.9rem;
   }
 
   button.rail-button {
-    min-height: 2.25rem;
-    padding-inline: 0.48rem;
-    font-size: 0.56rem;
+    min-height: 2.75rem;
+    padding-inline: 0.75rem;
+    font-size: 0.78rem;
   }
 
   .home-layout,
@@ -2112,7 +2197,7 @@ button.room-code {
   }
 
   .tagline {
-    font-size: 0.72rem;
+    font-size: 1rem;
   }
 
   .cube-stack {
@@ -2147,11 +2232,13 @@ button.room-code {
   }
 
   .field input {
-    min-height: 3.15rem;
+    min-height: 4rem;
+    font-size: 1.15rem;
   }
 
   .primary-action {
-    min-height: 3.35rem;
+    min-height: 4.25rem;
+    font-size: 1.05rem;
   }
 
   .join-group {
@@ -2213,11 +2300,13 @@ button.room-code {
 
   .lobby-actions {
     display: grid;
+    grid-template-columns: 1fr;
     width: 100%;
   }
 
   .lobby-actions button {
-    min-height: 3.35rem;
+    min-height: 4rem;
+    font-size: 1rem;
   }
 
   .game-layout {
@@ -2229,8 +2318,17 @@ button.room-code {
   }
 
   .control-deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "heading"
+      "own"
+      "buttons"
+      "opponents"
+      "admin";
+    grid-template-rows: auto auto minmax(10rem, 1fr) auto auto;
+    gap: 0.75rem;
     margin: 0.35rem 0.45rem max(0.45rem, env(safe-area-inset-bottom));
-    padding: 0.58rem;
+    padding: 0.8rem;
   }
 
   .control-deck::before {
@@ -2239,6 +2337,75 @@ button.room-code {
 
   .console-heading .key-hint {
     display: none;
+  }
+
+  .control-deck .console-heading,
+  .console-label {
+    font-size: 0.82rem;
+  }
+
+  .flip-digit {
+    width: clamp(4rem, 18vw, 5.25rem);
+    height: clamp(5.2rem, 23vw, 6.6rem);
+    font-size: clamp(3.8rem, 17vw, 5rem);
+  }
+
+  .control-btns {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "minus plus"
+      "lock lock";
+    gap: 0.85rem;
+  }
+
+  .btn-minus { grid-area: minus; }
+  .btn-plus { grid-area: plus; }
+  .btn-lock { grid-area: lock; }
+
+  .control-btns button {
+    min-height: 5.75rem;
+    padding: 0.8rem 1rem;
+    touch-action: manipulation;
+  }
+
+  .control-btns button strong {
+    font-size: clamp(2.1rem, 11vw, 3rem);
+  }
+
+  .btn-lock {
+    min-height: 5.75rem !important;
+  }
+
+  .btn-lock strong {
+    font-size: 1.45rem !important;
+  }
+
+  .opponents-row {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .opponent-tile {
+    flex-basis: 8.5rem;
+    min-height: 3.5rem;
+  }
+
+  .opponent-tile span { font-size: 0.78rem; }
+  .opponent-tile small { font-size: 0.65rem; }
+
+  .round-admin {
+    justify-content: stretch;
+  }
+
+  .round-admin button {
+    width: 100%;
+    min-height: 4.5rem;
+    border-color: var(--danger);
+    border-radius: 1rem;
+    background: rgba(165, 50, 50, 0.12);
+    color: var(--danger);
+    font-size: 1.05rem;
+    font-weight: 900;
   }
 
   .big-digit {
@@ -2329,8 +2496,9 @@ button.room-code {
       "heading"
       "opponents"
       "own"
-      "buttons";
-    grid-template-rows: auto minmax(5rem, auto) minmax(8rem, 1fr) minmax(7rem, 0.75fr);
+      "buttons"
+      "admin";
+    grid-template-rows: auto minmax(5rem, auto) minmax(7rem, 1fr) minmax(6rem, 0.75fr) auto;
     gap: 0.75rem;
     width: auto;
     height: auto;
@@ -2354,7 +2522,7 @@ button.room-code {
   }
 
   .control-btns {
-    grid-template-columns: minmax(0, 1.9fr) minmax(7.5rem, 1fr);
+    grid-template-columns: minmax(4.8rem, 0.7fr) minmax(0, 1.5fr) minmax(7rem, 0.9fr);
   }
 
   .control-btns button {
@@ -2362,7 +2530,11 @@ button.room-code {
   }
 
   .control-btns button strong {
-    font-size: clamp(1.8rem, 3.5vw, 3.4rem);
+    font-size: clamp(1.45rem, 2.4vw, 2.35rem);
+  }
+
+  .btn-lock strong {
+    font-size: clamp(1.25rem, 1.8vw, 1.75rem) !important;
   }
 
   .opponents-row {
@@ -2384,31 +2556,24 @@ button.room-code {
 
 /* Short phones and compact landscape */
 @media (max-height: 720px) and (max-width: 700px) {
+  .game-screen {
+    min-height: 100dvh;
+    height: auto;
+    overflow-y: auto;
+  }
+
   .game-layout {
-    grid-template-rows: minmax(13rem, 53fr) minmax(18.5rem, 47fr);
+    flex: 0 0 auto;
+    grid-template-rows: 12rem auto;
+    min-height: calc(100dvh - var(--rail-h));
   }
 
   .control-deck {
-    grid-template-rows: auto minmax(3.8rem, auto) minmax(4.8rem, 1fr);
-  }
-
-  .console-label {
-    display: none;
-  }
-
-  .opponent-panel,
-  .own-panel {
-    justify-content: center;
-  }
-
-  .flip-digit {
-    width: 2.45rem;
-    height: 3.2rem;
-    font-size: 2.35rem;
+    grid-template-rows: auto auto auto auto;
   }
 
   .control-btns button {
-    min-height: 4.7rem;
+    min-height: 6.5rem;
   }
 }
 
@@ -2448,8 +2613,9 @@ button.room-code {
     grid-template-areas:
       "heading heading"
       "opponents own"
-      "buttons buttons";
-    grid-template-rows: auto minmax(3.3rem, 0.75fr) minmax(5.2rem, 1fr);
+      "buttons buttons"
+      "admin admin";
+    grid-template-rows: auto minmax(3.3rem, 0.75fr) minmax(4.6rem, 1fr) auto;
     width: auto;
     height: auto;
     margin: 0.35rem 0.35rem 0.35rem 0.3rem;
@@ -2534,12 +2700,137 @@ button.room-code {
   }
 
   .control-btns {
-    grid-template-columns: minmax(0, 1.9fr) minmax(6.3rem, 0.9fr);
+    grid-template-columns: minmax(4rem, 0.65fr) minmax(0, 1.4fr) minmax(5.8rem, 0.9fr);
   }
 
   .ledger-labels,
   .scoreboard li {
     grid-template-columns: 1.8rem minmax(5.8rem, 1fr) minmax(3.1rem, 0.65fr) 2.4rem;
+  }
+}
+
+/* Compact portrait game controls */
+@media (orientation: portrait) and (max-width: 700px) {
+  .game-layout {
+    grid-template-rows: minmax(0, 48fr) minmax(0, 52fr);
+  }
+
+  .control-deck {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "heading"
+      "own"
+      "buttons"
+      "opponents"
+      "admin";
+    grid-template-rows: auto auto auto minmax(0, auto) auto;
+    gap: 0.4rem;
+    margin: 0.35rem 0.45rem max(0.45rem, env(safe-area-inset-bottom));
+    padding: 0.6rem;
+    overflow: hidden;
+  }
+
+  .control-deck .console-heading,
+  .console-label {
+    font-size: 0.7rem;
+  }
+
+  .own-panel {
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .flip-digit {
+    width: clamp(2.8rem, 14vw, 3.4rem);
+    height: clamp(3.6rem, 18vw, 4.3rem);
+    font-size: clamp(2.65rem, 13vw, 3.4rem);
+  }
+
+  .control-btns {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.3fr);
+    grid-template-areas: "minus plus lock";
+    gap: 0.45rem;
+  }
+
+  .control-btns button {
+    min-height: 4.25rem;
+    padding: 0.55rem 0.65rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .control-btns button small {
+    display: none;
+  }
+
+  .control-btns button strong {
+    font-size: clamp(1.8rem, 9vw, 2.4rem);
+  }
+
+  .btn-lock {
+    min-height: 4.25rem !important;
+  }
+
+  .btn-lock strong {
+    font-size: clamp(1rem, 5vw, 1.3rem) !important;
+  }
+
+  .opponents-row {
+    min-height: 3.1rem;
+  }
+
+  .opponent-tile {
+    flex-basis: 7.5rem;
+    min-height: 3.1rem;
+  }
+
+  .opponent-tile span { font-size: 0.7rem; }
+  .opponent-tile small { font-size: 0.58rem; }
+
+  .round-admin button {
+    min-height: 2.75rem;
+    border-radius: 0.55rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (orientation: portrait) and (max-height: 720px) and (max-width: 700px) {
+  .game-screen {
+    min-height: 0;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .game-layout {
+    flex: 1 1 auto;
+    grid-template-rows: minmax(9rem, 40fr) minmax(0, 60fr);
+    min-height: 0;
+  }
+
+  .control-deck {
+    grid-template-rows: auto auto auto minmax(0, auto) auto;
+    gap: 0.3rem;
+    padding: 0.5rem;
+  }
+
+  .control-btns button,
+  .btn-lock {
+    min-height: 3.5rem !important;
+  }
+
+  .flip-digit {
+    width: 2.8rem;
+    height: 3.6rem;
+    font-size: 2.65rem;
+  }
+
+  .opponents-row,
+  .opponent-tile {
+    min-height: 2.9rem;
+  }
+
+  .round-admin button {
+    min-height: 2.5rem;
   }
 }
 

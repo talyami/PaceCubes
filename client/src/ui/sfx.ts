@@ -4,7 +4,7 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = false;
 
-const MUTE_KEY = "pacecubs.mute";
+const MUTE_KEY = "yamicuberush.mute";
 
 export function loadMute(): boolean {
   try {
@@ -45,14 +45,19 @@ function ensure(): AudioContext | null {
   return ctx;
 }
 
-function blip(freq: number, durMs: number, type: OscillatorType = "square"): void {
+function blip(
+  freq: number,
+  durMs: number,
+  type: OscillatorType = "square",
+  volume = 0.55,
+): void {
   const c = ensure();
   if (!c || !master) return;
   const osc = c.createOscillator();
   const g = c.createGain();
   osc.type = type;
   osc.frequency.value = freq;
-  g.gain.value = 0.8;
+  g.gain.value = volume;
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + durMs / 1000);
   osc.connect(g);
   g.connect(master);
@@ -67,8 +72,26 @@ export const sfx = {
   lock: () => blip(220, 120, "triangle"),
   reveal: () => blip(990, 20),
   win: () => {
-    blip(523, 80);
-    setTimeout(() => blip(659, 80), 90);
-    setTimeout(() => blip(784, 120), 180);
+    const notes: Array<
+      [delay: number, frequency: number, duration: number, type: OscillatorType, volume: number]
+    > = [
+      [0, 196, 260, "triangle", 0.5],
+      [0, 523, 140, "square", 0.38],
+      [130, 659, 140, "square", 0.38],
+      [260, 784, 180, "square", 0.42],
+      [430, 1047, 300, "sawtooth", 0.34],
+      [650, 262, 380, "triangle", 0.48],
+      [650, 523, 380, "sine", 0.32],
+      [650, 659, 380, "sine", 0.3],
+      [650, 784, 380, "sine", 0.28],
+      [1080, 392, 180, "square", 0.34],
+      [1220, 523, 180, "square", 0.36],
+      [1360, 659, 180, "square", 0.38],
+      [1500, 784, 420, "sawtooth", 0.36],
+      [1500, 1047, 420, "sine", 0.28],
+    ];
+    for (const [delay, frequency, duration, type, volume] of notes) {
+      setTimeout(() => blip(frequency, duration, type, volume), delay);
+    }
   },
 };

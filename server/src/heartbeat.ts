@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HEARTBEAT_PING_MS, HEARTBEAT_TIMEOUT_MS } from "@pacecubs/shared";
+import { HEARTBEAT_PING_MS, HEARTBEAT_TIMEOUT_MS } from "@yamicuberush/shared";
 
 export interface HeartbeatSocket {
   ws: WebSocket;

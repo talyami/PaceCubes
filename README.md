@@ -1,4 +1,4 @@
-# Pace Cubs
+# YAMI CUBE RUSH
 
 Browser-based real-time multiplayer cube-counting party game.
 
@@ -32,14 +32,14 @@ npm run build
 
 ## Production Deployment (VPS)
 
-**Live URL:** https://villa.linkflow.page/pacecubs/
+**Live URL:** https://villa.linkflow.page/yamicuberush/
 
 The application runs on a VPS without Docker or PM2, utilizing `systemd` to keep the backend alive and `OpenLiteSpeed` to serve the static frontend and proxy WebSocket traffic.
 
 ### Architecture
-- **Frontend (Static):** Served by OpenLiteSpeed from `/home/villa.linkflow.page/public_html/pacecubs/`
-- **Backend (Node):** Managed by `systemd` (`pacecubs.service`), running from `/opt/pacecubs/server.js` on internal port `8091`.
-- **WebSocket Proxy:** OpenLiteSpeed is configured to route `/pacecubs/ws` -> `127.0.0.1:8091`.
+- **Frontend (Static):** Served by OpenLiteSpeed from `/home/villa.linkflow.page/public_html/yamicuberush/`
+- **Backend (Node):** Managed by `systemd` (`yamicuberush.service`), running from `/opt/yamicuberush/server.js` on internal port `8091`.
+- **WebSocket Proxy:** OpenLiteSpeed routes `/yamicuberush/ws` to `127.0.0.1:8091`.
 
 ### Deployment Procedure
 
@@ -54,13 +54,13 @@ Push the frontend and backend artifacts to the remote VPS using `scp`:
 
 ```bash
 # 1. Update the backend bundle
-scp dist/server.js samantha@31.97.182.123:/opt/pacecubs/server.js
+scp dist/server.js samantha@31.97.182.123:/opt/yamicuberush/server.js
 
 # 2. Update the frontend static files
-scp dist/public/* samantha@31.97.182.123:/home/villa.linkflow.page/public_html/pacecubs/
+scp dist/public/* samantha@31.97.182.123:/home/villa.linkflow.page/public_html/yamicuberush/
 
 # 3. Restart the backend service
-ssh samantha@31.97.182.123 "sudo systemctl restart pacecubs.service && sudo systemctl status pacecubs.service --no-pager"
+ssh samantha@31.97.182.123 "sudo systemctl restart yamicuberush.service && sudo systemctl status yamicuberush.service --no-pager"
 ```
 
 ## Protocol

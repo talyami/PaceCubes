@@ -1,4 +1,4 @@
-/** Pace Cubs shared protocol — single source of truth for client & server. */
+/** YAMI CUBE RUSH shared protocol — single source of truth for client & server. */
 
 export type Grid = number[][]; // 5×5, values 0–3 (stack height per cell)
 
@@ -12,12 +12,12 @@ export type RoomState =
   | "INTERMISSION"
   | "FINAL";
 
-export type Lang = "en" | "zh-CN";
-
 export type ErrCode =
   | "ROOM_NOT_FOUND"
+  | "BAD_ROOM_CODE"
   | "ROOM_FULL"
   | "ROOM_IN_MATCH"
+  | "SEAT_EXPIRED"
   | "BAD_NAME"
   | "NOT_HOST"
   | "BAD_PHASE"
@@ -33,6 +33,7 @@ export interface PlayerPub {
   ready: boolean;
   connected: boolean;
   score: number;
+  outcomes: ("exact" | "closest" | "none")[];
 }
 
 export interface RoomSnapshot {
@@ -43,7 +44,6 @@ export interface RoomSnapshot {
   round: number;
   rounds: number;
   hideOpponentCount: boolean;
-  lang: Lang;
 }
 
 export interface RoundResult {
@@ -53,15 +53,40 @@ export interface RoundResult {
   error: number;
   points: 0 | 1 | 3;
   outcome: "exact" | "closest" | "none";
+  connected: boolean;
+}
+
+export interface ScoreTotal {
+  playerId: string;
+  score: number;
+  connected: boolean;
+}
+
+export interface CounterState {
+  playerId: string;
+  value: number;
+  locked: boolean;
+  ackSeq: number;
+}
+
+export interface RevealState {
+  round: number;
+  grid: Grid;
+  truth: number;
+  order: [number, number, number][];
+  results: RoundResult[];
+  scores: ScoreTotal[];
+  nextRoundAt?: number;
 }
 
 export type C2S =
-  | { t: "createRoom"; name: string; lang?: Lang }
+  | { t: "createRoom"; name: string }
   | { t: "joinRoom"; code: string; name: string; playerToken?: string }
   | { t: "ready"; ready: boolean }
   | { t: "startMatch" }
-  | { t: "press" }
+  | { t: "adjust"; delta: -1 | 1; seq: number }
   | { t: "lock" }
+  | { t: "endMatch" }
   | { t: "timePing"; t0: number }
   | { t: "pong" }
   | { t: "rematch" }
@@ -77,7 +102,7 @@ export type S2C =
       serverNow: number;
     }
   | { t: "roomUpdate"; room: RoomSnapshot }
-  | { t: "matchStart"; rounds: number; introAt: number }
+  | { t: "matchStart"; rounds: number; roundAt: number }
   | {
       t: "roundIntro";
       round: number;
@@ -86,24 +111,78 @@ export type S2C =
       holdMs: number;
     }
   | { t: "flashData"; round: number; grid: Grid; seed: number }
-  | { t: "counter"; playerId: string; value: number }
+  | { t: "answerOpen"; round: number; answerEndsAt: number }
+  | { t: "counter"; playerId: string; value: number; ackSeq: number }
   | { t: "locked"; playerId: string }
-  | {
-      t: "reveal";
-      round: number;
-      grid: Grid;
-      truth: number;
-      order: [number, number, number][];
-      results: RoundResult[];
-      scores: { playerId: string; score: number }[];
-      nextRoundAt?: number;
-    }
+  | ({ t: "reveal" } & RevealState)
   | {
       t: "matchEnd";
-      scores: { playerId: string; score: number }[];
+      scores: ScoreTotal[];
       winnerIds: string[];
       endAt: number;
     }
+  | PhaseSync
   | { t: "timePong"; t0: number; t1: number }
   | { t: "ping" }
   | { t: "error"; code: ErrCode; msg: string };
+
+export type PhaseSync =
+  | { t: "phaseSync"; phase: "LOBBY"; serverNow: number }
+  | {
+      t: "phaseSync";
+      phase: "STARTING";
+      serverNow: number;
+      rounds: number;
+      roundAt: number;
+    }
+  | {
+      t: "phaseSync";
+      phase: "COUNTDOWN";
+      serverNow: number;
+      round: number;
+      countdownAt: number;
+      flashAt: number;
+      holdMs: number;
+      flash?: { grid: Grid; seed: number };
+    }
+  | {
+      t: "phaseSync";
+      phase: "FLASH";
+      serverNow: number;
+      round: number;
+      flashAt: number;
+      answerAt: number;
+      holdMs: number;
+      grid: Grid;
+      seed: number;
+    }
+  | {
+      t: "phaseSync";
+      phase: "ANSWER";
+      serverNow: number;
+      round: number;
+      answerEndsAt: number;
+      counters: CounterState[];
+    }
+  | {
+      t: "phaseSync";
+      phase: "REVEAL";
+      serverNow: number;
+      reveal: RevealState;
+      revealEndsAt: number;
+    }
+  | {
+      t: "phaseSync";
+      phase: "INTERMISSION";
+      serverNow: number;
+      reveal: RevealState;
+      nextRoundAt: number;
+    }
+  | {
+      t: "phaseSync";
+      phase: "FINAL";
+      serverNow: number;
+      scores: ScoreTotal[];
+      winnerIds: string[];
+      endAt: number;
+    };

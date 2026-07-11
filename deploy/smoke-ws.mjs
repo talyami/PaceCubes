@@ -34,9 +34,9 @@ function decodeServerText(buf) {
 const key = crypto.randomBytes(16).toString("base64");
 const req = https.request(
     {
-      host: "villa.linkflow.page",
+      host: "pacecubs-ws.icreditdept.online",
       port: 443,
-      path: "/pacecubs/ws",
+      path: "/ws",
       headers: {
         Connection: "Upgrade",
         Upgrade: "websocket",

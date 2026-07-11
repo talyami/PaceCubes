@@ -6,12 +6,12 @@ import {
   COUNTER_FLUSH_MS,
   FLASH_DATA_LEAD_MS,
   INTERMISSION_MS,
-  INTRO_STEP_MS,
-  INTRO_STEPS,
+  MATCH_INTRO_MS,
   MATCH_ROUNDS,
   MAX_COUNTER,
   MAX_PLAYERS,
   MAX_SUDDEN_DEATH,
+  ROUND_HOLD_INCREMENT_MS,
   REVEAL_CUBE_MS,
   REVEAL_HOLD_MS,
   SEAT_DISCONNECT_TTL_MS,
@@ -27,11 +27,12 @@ import {
   sumGrid,
   type C2S,
   type Grid,
-  type Lang,
+  type RevealState,
   type RoomSnapshot,
   type RoomState,
+  type ScoreTotal,
   type S2C,
-} from "@pacecubs/shared";
+} from "@yamicuberush/shared";
 import { Analytics } from "./analytics.js";
 import { log } from "./log.js";
 import { Player, sanitizeName } from "./player.js";
@@ -47,8 +48,7 @@ export class Room {
   hostId = "";
   round = 0;
   rounds = MATCH_ROUNDS;
-  hideOpponentCount = false;
-  lang: Lang = "en";
+  hideOpponentCount = true;
   createdAt = Date.now();
   lastActivity = Date.now();
 
@@ -62,6 +62,20 @@ export class Room {
   private suddenDeathIds: string[] | null = null;
   private matchStartedAt = 0;
   private destroyed = false;
+  /** Stable match records; entries survive live seat expiry. */
+  private matchPlayers = new Map<string, Player>();
+  private roundAt = 0;
+  private countdownAt = 0;
+  private flashAt = 0;
+  private answerAt = 0;
+  private answerEndsAt = 0;
+  private revealEndsAt = 0;
+  private nextRoundAt = 0;
+  private flashDataSent = false;
+  private lastReveal: RevealState | null = null;
+  private finalScores: ScoreTotal[] = [];
+  private finalWinnerIds: string[] = [];
+  private finalEndAt = 0;
 
   constructor(
     code: string,
@@ -76,15 +90,16 @@ export class Room {
   }
 
   snapshot(): RoomSnapshot {
+    const source =
+      this.state === "LOBBY" ? this.players : this.matchPlayers;
     return {
       code: this.code,
       state: this.state,
-      players: [...this.players.values()].map((p) => p.toPub()),
+      players: [...source.values()].map((p) => p.toPub()),
       hostId: this.hostId,
       round: this.round,
       rounds: this.rounds,
       hideOpponentCount: this.hideOpponentCount,
-      lang: this.lang,
     };
   }
 
@@ -106,11 +121,15 @@ export class Room {
     if (token) {
       const existing = [...this.players.values()].find((p) => p.token === token);
       if (existing) {
-        if (existing.ws && existing.ws !== ws && existing.ws.readyState === existing.ws.OPEN) {
+        // A backgrounded phone can leave a zombie OPEN socket behind. A valid,
+        // unguessable player token owns the seat, so the newest connection wins.
+        if (existing.ws && existing.ws !== ws) {
+          const staleSocket = existing.ws;
+          existing.ws = null;
           try {
-            existing.ws.close(4000, "SEAT_TAKEN");
+            staleSocket.close(4001, "session resumed");
           } catch {
-            /* ignore */
+            /* stale transport is already gone */
           }
         }
         if (existing.disconnectTimer) {
@@ -119,6 +138,8 @@ export class Room {
         }
         existing.ws = ws;
         existing.connected = true;
+        const matchRecord = this.matchPlayers.get(existing.id);
+        if (matchRecord) matchRecord.connected = true;
         existing.lastPong = Date.now();
         if (name) {
           const n = sanitizeName(name);
@@ -126,6 +147,18 @@ export class Room {
         }
         this.analytics.track("player_rejoined", { phase: this.state }, this.code);
         return existing;
+      }
+      const expired = [...this.matchPlayers.values()].some(
+        (p) => p.token === token,
+      );
+      if (expired) {
+        return {
+          error: {
+            t: "error",
+            code: "SEAT_EXPIRED",
+            msg: "Your seat expired",
+          },
+        };
       }
     }
 
@@ -178,6 +211,18 @@ export class Room {
   markDisconnected(player: Player): void {
     player.connected = false;
     player.ws = null;
+    if (this.state === "ANSWER" && !player.locked) {
+      player.locked = true;
+      player.lockAt = null;
+      player.counterDirty = false;
+      this.broadcast({
+        t: "counter",
+        playerId: player.id,
+        value: player.counter,
+        ackSeq: player.lastAdjustSeq,
+      });
+      this.broadcast({ t: "locked", playerId: player.id });
+    }
     this.broadcast({ t: "roomUpdate", room: this.snapshot() });
     this.analytics.track(
       "player_disconnected",
@@ -204,11 +249,16 @@ export class Room {
     if ([...this.players.values()].every((p) => !p.connected)) {
       // all disconnected — empty room TTL handled by manager
     }
+
+    if (this.state === "ANSWER" && this.allRelevantLocked()) {
+      this.finishAnswer();
+    }
   }
 
   dropSeat(playerId: string): void {
     const p = this.players.get(playerId);
     if (!p || p.connected) return;
+    p.disconnectTimer = null;
     this.players.delete(playerId);
     if (this.hostId === playerId) {
       const next = [...this.players.values()][0];
@@ -229,11 +279,14 @@ export class Room {
       case "startMatch":
         this.startMatch(player);
         break;
-      case "press":
-        this.onPress(player);
+      case "adjust":
+        this.onAdjust(player, msg.delta, msg.seq);
         break;
       case "lock":
         this.onLock(player);
+        break;
+      case "endMatch":
+        this.onEndMatch(player);
         break;
       case "rematch":
         this.onRematch(player);
@@ -277,7 +330,8 @@ export class Room {
       return;
     }
 
-    for (const p of this.players.values()) p.resetForMatch();
+    this.matchPlayers = new Map(this.players);
+    for (const p of this.matchPlayers.values()) p.resetForMatch();
     this.round = 0;
     this.rounds = MATCH_ROUNDS;
     this.suddenDeathRound = 0;
@@ -285,17 +339,15 @@ export class Room {
     this.matchStartedAt = Date.now();
     this.state = "STARTING";
 
-    const introAt = Date.now() + 100;
-    this.broadcast({ t: "matchStart", rounds: this.rounds, introAt });
+    this.roundAt = Date.now() + MATCH_INTRO_MS;
+    this.broadcast({ t: "matchStart", rounds: this.rounds, roundAt: this.roundAt });
     this.analytics.track(
       "match_started",
       { players: this.players.size, rounds: this.rounds },
       this.code,
     );
 
-    // After intro countdown (3 steps × 1s), begin round 1
-    const introEnd = introAt + INTRO_STEPS * INTRO_STEP_MS;
-    this.setPhase("STARTING", introEnd, () => this.beginRound(1));
+    this.setPhase("STARTING", this.roundAt, () => this.beginRound(1));
   }
 
   private beginRound(round: number): void {
@@ -306,57 +358,81 @@ export class Room {
     const target = pickTargetCubes(this.seed, diff.minCubes, diff.maxCubes);
     this.grid = generateGrid(this.seed, target, diff.maxHeight);
     this.truth = sumGrid(this.grid);
-    this.holdMs = diff.holdMs;
+    // Give players two additional seconds after every completed round.
+    this.holdMs = diff.holdMs + Math.max(0, round - 1) * ROUND_HOLD_INCREMENT_MS;
 
-    for (const p of this.players.values()) {
-      if (this.suddenDeathIds && !this.suddenDeathIds.includes(p.id)) continue;
-      p.resetForRound();
+    for (const p of this.matchPlayers.values()) {
+      const eligible =
+        !this.suddenDeathIds || this.suddenDeathIds.includes(p.id);
+      p.roundActive = eligible && p.connected;
+      if (p.roundActive) p.resetForRound();
     }
 
     const now = Date.now();
-    const countdownAt = now + 50;
-    const flashAt = countdownAt + COUNTDOWN_MS;
+    this.countdownAt = now + 50;
+    this.flashAt = this.countdownAt + COUNTDOWN_MS;
+    this.answerAt = this.flashAt + SLIDE_IN_MS + this.holdMs + VANISH_MS;
+    this.flashDataSent = false;
+    this.lastReveal = null;
 
     this.state = "COUNTDOWN";
     this.broadcast({
       t: "roundIntro",
       round,
-      countdownAt,
-      flashAt,
+      countdownAt: this.countdownAt,
+      flashAt: this.flashAt,
       holdMs: this.holdMs,
     });
 
     // Send flashData at flashAt − 300ms
-    const dataAt = flashAt - FLASH_DATA_LEAD_MS;
+    const dataAt = this.flashAt - FLASH_DATA_LEAD_MS;
     this.setPhase("COUNTDOWN", dataAt, () => {
       if (!this.grid) return;
+      this.flashDataSent = true;
       this.broadcast({
         t: "flashData",
         round,
         grid: this.grid,
         seed: this.seed,
       });
-      this.state = "FLASH";
-      // After slide-in + hold + vanish → ANSWER
-      const answerAt = flashAt + SLIDE_IN_MS + this.holdMs + VANISH_MS;
-      this.setPhase("FLASH", answerAt, () => this.enterAnswer());
+      this.setPhase("COUNTDOWN", this.flashAt, () => {
+        this.state = "FLASH";
+        this.setPhase("FLASH", this.answerAt, () => this.enterAnswer());
+      });
     });
   }
 
   private enterAnswer(): void {
     this.state = "ANSWER";
     this.startCounterFlush();
-    const answerEnd = Date.now() + ANSWER_TIMEOUT_MS;
-    this.setPhase("ANSWER", answerEnd, () => this.finishAnswer(true));
+    this.answerEndsAt = Date.now() + ANSWER_TIMEOUT_MS;
+    for (const p of this.relevantPlayers()) {
+      if (!p.connected) {
+        p.locked = true;
+        p.lockAt = null;
+      }
+    }
+    this.broadcast({
+      t: "answerOpen",
+      round: this.round,
+      answerEndsAt: this.answerEndsAt,
+    });
+    this.setPhase("ANSWER", this.answerEndsAt, () => this.finishAnswer());
+    if (this.allRelevantLocked()) this.finishAnswer();
   }
 
   private startCounterFlush(): void {
     this.stopCounterFlush();
     this.counterFlush = setInterval(() => {
-      for (const p of this.players.values()) {
+      for (const p of this.matchPlayers.values()) {
         if (!p.counterDirty) continue;
         p.counterDirty = false;
-        const msg: S2C = { t: "counter", playerId: p.id, value: p.counter };
+        const msg: S2C = {
+          t: "counter",
+          playerId: p.id,
+          value: p.counter,
+          ackSeq: p.lastAdjustSeq,
+        };
         if (this.hideOpponentCount) {
           this.sendTo(p, msg);
         } else {
@@ -373,14 +449,30 @@ export class Room {
     }
   }
 
-  private onPress(player: Player): void {
-    if (this.state !== "ANSWER") return;
+  private onAdjust(player: Player, delta: -1 | 1, seq: number): void {
+    if (this.state !== "ANSWER") {
+      this.sendTo(player, {
+        t: "error",
+        code: "BAD_PHASE",
+        msg: "Counter is closed",
+      });
+      return;
+    }
+    if (delta !== -1 && delta !== 1) {
+      this.sendTo(player, {
+        t: "error",
+        code: "BAD_MESSAGE",
+        msg: "Invalid counter adjustment",
+      });
+      return;
+    }
+    if (!Number.isSafeInteger(seq) || seq <= player.lastAdjustSeq) return;
+    player.lastAdjustSeq = seq;
+    player.counterDirty = true;
     if (player.locked) return;
     if (this.suddenDeathIds && !this.suddenDeathIds.includes(player.id)) return;
-    if (!player.pressBucket.tryTake()) return; // silent drop
-    if (player.counter >= MAX_COUNTER) return;
-    player.counter += 1;
-    player.counterDirty = true;
+    if (!player.adjustBucket.tryTake()) return;
+    player.counter = Math.max(0, Math.min(MAX_COUNTER, player.counter + delta));
   }
 
   private onLock(player: Player): void {
@@ -390,17 +482,21 @@ export class Room {
     player.locked = true;
     player.lockAt = Date.now();
     player.counterDirty = false;
+    this.broadcast({
+      t: "counter",
+      playerId: player.id,
+      value: player.counter,
+      ackSeq: player.lastAdjustSeq,
+    });
     this.broadcast({ t: "locked", playerId: player.id });
-    // Also flush final counter
-    this.broadcast({ t: "counter", playerId: player.id, value: player.counter });
 
     if (this.allRelevantLocked()) {
-      this.finishAnswer(false);
+      this.finishAnswer();
     }
   }
 
   private relevantPlayers(): Player[] {
-    const all = [...this.players.values()];
+    const all = [...this.matchPlayers.values()].filter((p) => p.roundActive);
     if (this.suddenDeathIds) {
       return all.filter((p) => this.suddenDeathIds!.includes(p.id));
     }
@@ -411,16 +507,47 @@ export class Room {
     return this.relevantPlayers().every((p) => p.locked || !p.connected);
   }
 
-  private finishAnswer(timedOut: boolean): void {
+  private onEndMatch(player: Player): void {
+    if (player.id !== this.hostId) {
+      this.sendTo(player, {
+        t: "error",
+        code: "NOT_HOST",
+        msg: "Only the host can end the game",
+      });
+      return;
+    }
+    if (this.state === "LOBBY" || this.state === "FINAL") {
+      this.sendTo(player, {
+        t: "error",
+        code: "BAD_PHASE",
+        msg: "There is no active game to end",
+      });
+      return;
+    }
+    const scores = [...this.matchPlayers.values()].map((p) => ({
+      playerId: p.id,
+      score: p.score,
+      connected: p.connected,
+    }));
+    this.endMatch(matchWinner(scores));
+  }
+
+  private finishAnswer(): void {
+    if (this.state !== "ANSWER") return;
     this.clearPhaseTimer();
     this.stopCounterFlush();
 
     for (const p of this.relevantPlayers()) {
       if (!p.locked) {
         p.locked = true;
-        p.lockAt = timedOut ? null : Date.now();
+        p.lockAt = null;
+        this.broadcast({
+          t: "counter",
+          playerId: p.id,
+          value: p.counter,
+          ackSeq: p.lastAdjustSeq,
+        });
         this.broadcast({ t: "locked", playerId: p.id });
-        this.broadcast({ t: "counter", playerId: p.id, value: p.counter });
       }
     }
 
@@ -436,11 +563,12 @@ export class Room {
         playerId: p.id,
         value: p.counter,
         lockAt: p.lockAt,
+        connected: p.connected,
       })),
     );
 
     for (const r of results) {
-      const p = this.players.get(r.playerId);
+      const p = this.matchPlayers.get(r.playerId);
       if (!p) continue;
       p.score += r.points;
       p.roundOutcomes.push(r.outcome);
@@ -448,23 +576,28 @@ export class Room {
 
     const order = revealOrder(this.grid);
     const revealDuration = order.length * REVEAL_CUBE_MS + REVEAL_HOLD_MS;
-    const scores = [...this.players.values()].map((p) => ({
+    const scores = [...this.matchPlayers.values()].map((p) => ({
       playerId: p.id,
       score: p.score,
+      connected: p.connected,
     }));
 
     const isLastNormal = this.round >= this.rounds && !this.suddenDeathIds;
-    const nextRoundAt = Date.now() + revealDuration + INTERMISSION_MS;
-
-    this.broadcast({
-      t: "reveal",
+    this.revealEndsAt = Date.now() + revealDuration;
+    this.nextRoundAt = this.revealEndsAt + INTERMISSION_MS;
+    this.lastReveal = {
       round: this.round,
       grid: this.grid,
       truth: this.truth,
       order,
       results,
       scores,
-      nextRoundAt: isLastNormal ? undefined : nextRoundAt,
+      nextRoundAt: isLastNormal ? undefined : this.nextRoundAt,
+    };
+
+    this.broadcast({
+      t: "reveal",
+      ...this.lastReveal,
     });
 
     this.analytics.track(
@@ -481,9 +614,9 @@ export class Room {
       this.code,
     );
 
-    this.setPhase("REVEAL", Date.now() + revealDuration, () => {
+    this.setPhase("REVEAL", this.revealEndsAt, () => {
       this.state = "INTERMISSION";
-      this.setPhase("INTERMISSION", nextRoundAt, () => this.afterIntermission());
+      this.setPhase("INTERMISSION", this.nextRoundAt, () => this.afterIntermission());
     });
   }
 
@@ -492,7 +625,7 @@ export class Room {
       // Continue sudden death or end
       const tied = matchWinner(
         this.suddenDeathIds.map((id) => {
-          const p = this.players.get(id)!;
+          const p = this.matchPlayers.get(id)!;
           return { playerId: id, score: p.score };
         }),
       );
@@ -506,9 +639,10 @@ export class Room {
     }
 
     if (this.round >= this.rounds) {
-      const scores = [...this.players.values()].map((p) => ({
+      const scores = [...this.matchPlayers.values()].map((p) => ({
         playerId: p.id,
         score: p.score,
+        connected: p.connected,
       }));
       if (needsSuddenDeath(scores)) {
         this.suddenDeathIds = matchWinner(scores);
@@ -527,11 +661,15 @@ export class Room {
     this.state = "FINAL";
     this.clearPhaseTimer();
     this.stopCounterFlush();
-    const scores = [...this.players.values()].map((p) => ({
+    const scores = [...this.matchPlayers.values()].map((p) => ({
       playerId: p.id,
       score: p.score,
+      connected: p.connected,
     }));
     const endAt = Date.now() + 100;
+    this.finalScores = scores;
+    this.finalWinnerIds = winnerIds;
+    this.finalEndAt = endAt;
     this.broadcast({ t: "matchEnd", scores, winnerIds, endAt });
     this.analytics.track(
       "match_end",
@@ -604,37 +742,98 @@ export class Room {
       room: this.snapshot(),
       serverNow: Date.now(),
     });
-    this.broadcast({ t: "roomUpdate", room: this.snapshot() });
-
-    if (this.state === "LOBBY" || this.state === "FINAL") return;
-
-    // Re-send counters
-    for (const p of this.players.values()) {
-      this.sendTo(player, {
-        t: "counter",
-        playerId: p.id,
-        value: p.counter,
-      });
-      if (p.locked) {
-        this.sendTo(player, { t: "locked", playerId: p.id });
-      }
-    }
-
-    if (
-      (this.state === "COUNTDOWN" ||
-        this.state === "FLASH" ||
-        this.state === "ANSWER") &&
-      this.grid
-    ) {
-      // If flash window already passed data, send grid
-      if (this.state === "FLASH" || this.state === "ANSWER") {
+    const serverNow = Date.now();
+    switch (this.state) {
+      case "LOBBY":
+        this.sendTo(player, { t: "phaseSync", phase: "LOBBY", serverNow });
+        break;
+      case "STARTING":
         this.sendTo(player, {
-          t: "flashData",
-          round: this.round,
-          grid: this.grid,
-          seed: this.seed,
+          t: "phaseSync",
+          phase: "STARTING",
+          serverNow,
+          rounds: this.rounds,
+          roundAt: this.roundAt,
         });
-      }
+        break;
+      case "COUNTDOWN":
+        this.sendTo(player, {
+          t: "phaseSync",
+          phase: "COUNTDOWN",
+          serverNow,
+          round: this.round,
+          countdownAt: this.countdownAt,
+          flashAt: this.flashAt,
+          holdMs: this.holdMs,
+          flash:
+            this.flashDataSent && this.grid
+              ? { grid: this.grid, seed: this.seed }
+              : undefined,
+        });
+        break;
+      case "FLASH":
+        if (this.grid) {
+          this.sendTo(player, {
+            t: "phaseSync",
+            phase: "FLASH",
+            serverNow,
+            round: this.round,
+            flashAt: this.flashAt,
+            answerAt: this.answerAt,
+            holdMs: this.holdMs,
+            grid: this.grid,
+            seed: this.seed,
+          });
+        }
+        break;
+      case "ANSWER":
+        this.sendTo(player, {
+          t: "phaseSync",
+          phase: "ANSWER",
+          serverNow,
+          round: this.round,
+          answerEndsAt: this.answerEndsAt,
+          counters: [...this.matchPlayers.values()].map((p) => ({
+            playerId: p.id,
+            value: p.counter,
+            locked: p.locked,
+            ackSeq: p.lastAdjustSeq,
+          })),
+        });
+        break;
+      case "REVEAL":
+        if (this.lastReveal) {
+          this.sendTo(player, {
+            t: "phaseSync",
+            phase: "REVEAL",
+            serverNow,
+            reveal: this.lastReveal,
+            revealEndsAt: this.revealEndsAt,
+          });
+        }
+        break;
+      case "INTERMISSION":
+        if (this.lastReveal) {
+          this.sendTo(player, {
+            t: "phaseSync",
+            phase: "INTERMISSION",
+            serverNow,
+            reveal: this.lastReveal,
+            nextRoundAt: this.nextRoundAt,
+          });
+        }
+        break;
+      case "FINAL":
+        this.sendTo(player, {
+          t: "phaseSync",
+          phase: "FINAL",
+          serverNow,
+          scores: this.finalScores,
+          winnerIds: this.finalWinnerIds,
+          endAt: this.finalEndAt,
+        });
+        break;
     }
+    this.broadcast({ t: "roomUpdate", room: this.snapshot() });
   }
 }

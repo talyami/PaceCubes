@@ -48,6 +48,31 @@ describe("scoreRound", () => {
     expect(r.find((x) => x.playerId === "p2")!.points).toBe(1);
     expect(r.find((x) => x.playerId === "p1")!.points).toBe(0);
   });
+
+  it("matches hand-computed exact, closest, and multi-round totals", () => {
+    const round1 = scoreRound(12, [
+      { playerId: "p1", value: 12, lockAt: 200 },
+      { playerId: "p2", value: 11, lockAt: 100 },
+      { playerId: "p3", value: 14, lockAt: 50, connected: false },
+    ]);
+    const round2 = scoreRound(20, [
+      { playerId: "p1", value: 18, lockAt: 300 },
+      { playerId: "p2", value: 22, lockAt: 200 },
+      { playerId: "p3", value: 19, lockAt: null, connected: false },
+    ]);
+    const totals = new Map<string, number>();
+    for (const result of [...round1, ...round2]) {
+      totals.set(
+        result.playerId,
+        (totals.get(result.playerId) ?? 0) + result.points,
+      );
+    }
+    expect(round1.map((result) => result.points)).toEqual([3, 0, 0]);
+    expect(round2.map((result) => result.points)).toEqual([0, 0, 1]);
+    expect(Object.fromEntries(totals)).toEqual({ p1: 3, p2: 0, p3: 1 });
+    expect(round2.find((result) => result.playerId === "p3")?.connected)
+      .toBe(false);
+  });
 });
 
 describe("matchWinner", () => {

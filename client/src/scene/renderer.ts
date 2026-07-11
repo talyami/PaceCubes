@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GRID_SIZE, PALETTE } from "@pacecubs/shared";
+import { GRID_SIZE, PALETTE } from "@yamicuberush/shared";
 
 const CELL = 1;
 const CUBE = 0.92;
@@ -155,6 +155,15 @@ export class GameScene {
     this.cubes.count = 0;
     this.instanceCount = 0;
     this.instanceMeta.length = 0;
+  }
+
+  showReveal(grid: number[][]): void {
+    this.setGrid(grid, true);
+    if (!this.cubes) return;
+    for (let i = 0; i < this.instanceCount; i++) {
+      this.cubes.setColorAt(i, this.green);
+    }
+    if (this.cubes.instanceColor) this.cubes.instanceColor.needsUpdate = true;
   }
 
   /** Place cubes instantly (no anim) at grid positions. */

@@ -9,7 +9,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@pacecubs/shared": path.resolve(__dirname, "shared/src/index.ts"),
+      "@yamicuberush/shared": path.resolve(__dirname, "shared/src/index.ts"),
     },
   },
 });

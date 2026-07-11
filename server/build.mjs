@@ -14,7 +14,7 @@ await esbuild.build({
   outfile: path.join(root, "dist/server.js"),
   packages: "bundle",
   alias: {
-    "@pacecubs/shared": path.join(root, "shared/src/index.ts"),
+    "@yamicuberush/shared": path.join(root, "shared/src/index.ts"),
   },
   banner: {
     js: `import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);`,

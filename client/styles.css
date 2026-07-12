@@ -2844,3 +2844,139 @@ button.room-code {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Level 1 — flat anime portrait board */
+.anime-board {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  z-index: 2;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+.anime-board.hidden {
+  display: none !important;
+}
+
+.anime-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem;
+}
+
+.anime-cell {
+  position: relative;
+  border: 1px dashed rgba(34, 34, 34, 0.18);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  transform: scale(calc(0.001 + var(--pop, 1) * 0.999));
+  opacity: calc(var(--pop, 1));
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.anime-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  image-rendering: auto;
+}
+
+.anime-cell .anime-portrait.hidden-tile {
+  opacity: 0;
+}
+
+.anime-cell.revealed {
+  border-color: #34d434;
+  box-shadow: inset 0 -0.2rem 0 #34d434;
+}
+
+.anime-cell.pop {
+  animation: anime-pop 120ms ease;
+}
+
+@keyframes anime-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.level-pick {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.55rem;
+  background: var(--bg);
+}
+
+.level-pick legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.level-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.level-option:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: inset 0.22rem 0 0 var(--green);
+}
+
+.level-option input {
+  accent-color: var(--green);
+}
+
+.level-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.35rem;
+  background: var(--green-soft);
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Level 1 dimensional map overrides */
+.anime-board { top: 52px; bottom: 52px; perspective: 900px; }
+.anime-grid { position: relative; transform-style: preserve-3d; transform: rotateX(48deg) rotateZ(-1deg); gap: .5rem; padding: .75rem; border: 1px solid rgba(34,34,34,.18); border-radius: 1rem; background: linear-gradient(145deg,#eef1f5,#d9dde3); box-shadow: 0 1.2rem 2.2rem rgba(34,34,34,.22), inset .18rem .18rem .35rem rgba(255,255,255,.9), inset -.18rem -.18rem .35rem rgba(92,100,112,.22); }
+.anime-cell { align-self: center; justify-self: center; width: 82%; height: 82%; overflow: visible; border: 2px solid rgba(255,255,255,.85); border-radius: .55rem; background: #f8f8fa; transform-style: preserve-3d; transform: translateZ(calc(10px * var(--pop, 1))) rotateZ(var(--tilt)) scale(calc(.15 + var(--pop, 1) * .85)); opacity: var(--pop, 1); box-shadow: .16rem .16rem 0 #656b75, .32rem .32rem 0 #454a52, .55rem .65rem .8rem rgba(24,26,30,.35); }
+.anime-cell::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset .15rem .15rem .25rem rgba(255,255,255,.7), inset -.12rem -.12rem .22rem rgba(0,0,0,.18); }
+.anime-portrait { border-radius: calc(.55rem - 2px); backface-visibility: hidden; }
+.anime-cell.is-entering { opacity: var(--pop, 0); }
+.anime-cell.revealed { transform: translateZ(18px) rotateZ(var(--tilt)) scale(1.04); box-shadow: .16rem .16rem 0 #24a824, .32rem .32rem 0 #147514, .65rem .8rem 1rem rgba(24,26,30,.4); }

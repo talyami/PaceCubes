@@ -1,6 +1,9 @@
 /** YAMI CUBE RUSH shared protocol — single source of truth for client & server. */
 
-export type Grid = number[][]; // 5×5, values 0–3 (stack height per cell)
+export type Grid = number[][]; // 5×5; level 2: stack height 0–3; level 1: 0 or 1 tile
+
+/** 1 = flat anime portrait tiles; 2 = classic stacked cubes */
+export type GameLevel = 1 | 2;
 
 export type RoomState =
   | "LOBBY"
@@ -44,6 +47,7 @@ export interface RoomSnapshot {
   round: number;
   rounds: number;
   hideOpponentCount: boolean;
+  level: GameLevel;
 }
 
 export interface RoundResult {
@@ -73,6 +77,7 @@ export interface RevealState {
   round: number;
   grid: Grid;
   truth: number;
+  seed: number;
   order: [number, number, number][];
   results: RoundResult[];
   scores: ScoreTotal[];
@@ -80,7 +85,7 @@ export interface RevealState {
 }
 
 export type C2S =
-  | { t: "createRoom"; name: string }
+  | { t: "createRoom"; name: string; level: GameLevel }
   | { t: "joinRoom"; code: string; name: string; playerToken?: string }
   | { t: "ready"; ready: boolean }
   | { t: "startMatch" }
@@ -110,7 +115,7 @@ export type S2C =
       flashAt: number;
       holdMs: number;
     }
-  | { t: "flashData"; round: number; grid: Grid; seed: number }
+  | { t: "flashData"; round: number; grid: Grid; seed: number; level: GameLevel }
   | { t: "answerOpen"; round: number; answerEndsAt: number }
   | { t: "counter"; playerId: string; value: number; ackSeq: number }
   | { t: "locked"; playerId: string }

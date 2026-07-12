@@ -4,6 +4,9 @@ export const VERSION = "1.0.0";
 
 export const GRID_SIZE = 5;
 export const MAX_STACK = 3;
+export const MAX_ANIME_TILES = GRID_SIZE * GRID_SIZE;
+export const ANIME_PORTRAIT_COUNT = 36;
+export const ROOM_CODE_CAPACITY = 100;
 export const MAX_COUNTER = 99;
 export const MATCH_ROUNDS = 7;
 export const MAX_SUDDEN_DEATH = 3;
@@ -57,14 +60,34 @@ export const DIFFICULTY: readonly DifficultyRow[] = [
   { round: 7, minCubes: 22, maxCubes: 30, maxHeight: 3, holdMs: 800 },
 ] as const;
 
-export function difficultyForRound(round: number): DifficultyRow {
+/** Level 1 — single-story anime tiles only (max 25 occupied cells). */
+export const ANIME_DIFFICULTY: readonly DifficultyRow[] = [
+  { round: 1, minCubes: 3, maxCubes: 5, maxHeight: 1, holdMs: 2000 },
+  { round: 2, minCubes: 5, maxCubes: 8, maxHeight: 1, holdMs: 1800 },
+  { round: 3, minCubes: 7, maxCubes: 10, maxHeight: 1, holdMs: 1600 },
+  { round: 4, minCubes: 9, maxCubes: 13, maxHeight: 1, holdMs: 1400 },
+  { round: 5, minCubes: 12, maxCubes: 16, maxHeight: 1, holdMs: 1200 },
+  { round: 6, minCubes: 15, maxCubes: 19, maxHeight: 1, holdMs: 1000 },
+  { round: 7, minCubes: 18, maxCubes: 22, maxHeight: 1, holdMs: 900 },
+] as const;
+
+export function difficultyTable(level: 1 | 2): readonly DifficultyRow[] {
+  return level === 1 ? ANIME_DIFFICULTY : DIFFICULTY;
+}
+
+export function difficultyForRound(round: number, level: 1 | 2 = 2): DifficultyRow {
+  const table = difficultyTable(level);
   if (round <= 7) {
-    const row = DIFFICULTY[round - 1];
+    const row = table[round - 1];
     if (!row) throw new Error(`missing difficulty for round ${round}`);
     return row;
   }
-  // sudden-death reuses row 7
-  return DIFFICULTY[6]!;
+  return table[6]!;
+}
+
+export function parseGameLevel(raw: unknown): 1 | 2 | null {
+  if (raw === 1 || raw === 2) return raw;
+  return null;
 }
 
 export const PALETTE = {

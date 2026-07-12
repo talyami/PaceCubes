@@ -1,4 +1,5 @@
 import type {
+  GameLevel,
   Grid,
   PhaseSync,
   RevealState,
@@ -16,6 +17,7 @@ import {
   storeActiveSession,
 } from "./net.js";
 import { GameScene } from "./scene/renderer.js";
+import { AnimeBoard } from "./scene/animeBoard.js";
 import { FlipCounter } from "./ui/counter.js";
 import { t } from "./ui/i18n.js";
 import { isMuted, loadMute, setMuted, sfx } from "./ui/sfx.js";
@@ -28,6 +30,35 @@ const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const net = new Net();
 const clock = new ClockSync(net);
 let scene: GameScene | null = null;
+let animeBoard: AnimeBoard | null = null;
+
+const LEVEL_KEY = "yamicuberush.level";
+
+function loadLevel(): GameLevel {
+  try {
+    const v = localStorage.getItem(LEVEL_KEY);
+    if (v === "1") return 1;
+  } catch {
+    /* ignore */
+  }
+  return 2;
+}
+
+function saveLevel(level: GameLevel): void {
+  try {
+    localStorage.setItem(LEVEL_KEY, String(level));
+  } catch {
+    /* ignore */
+  }
+}
+
+function roomLevel(): GameLevel {
+  return room?.level ?? 2;
+}
+
+function isAnimeLevel(level: GameLevel = roomLevel()): boolean {
+  return level === 1;
+}
 
 let screen: Screen = "home";
 let myId = "";
@@ -38,7 +69,14 @@ let ownLocked = false;
 let lockPending = false;
 let answerStartedAt = 0;
 let lockArmed = false;
-let pendingFlash: { grid: Grid; flashAt: number; holdMs: number; round: number } | null = null;
+let pendingFlash: {
+  grid: Grid;
+  flashAt: number;
+  holdMs: number;
+  round: number;
+  seed: number;
+  level: GameLevel;
+} | null = null;
 let flashFired = false;
 let syncSent = false;
 let lastScores: ScoreTotal[] = [];
@@ -123,6 +161,13 @@ function confettiBurst(): void {
   setTimeout(() => layer.remove(), 4800);
 }
 
+function ensureAnimeBoard(): AnimeBoard {
+  if (!animeBoard) {
+    animeBoard = new AnimeBoard();
+  }
+  return animeBoard;
+}
+
 function ensureScene(): GameScene {
   if (!scene) {
     scene = new GameScene(canvas);
@@ -134,9 +179,25 @@ function ensureScene(): GameScene {
 
 function setScreen(s: Screen): void {
   screen = s;
-  canvas.style.display = s === "game" ? "block" : "none";
-  if (s === "game") ensureScene().show(true);
-  else scene?.show(false);
+  const inGame = s === "game";
+  const anime = inGame && isAnimeLevel();
+  canvas.style.display = inGame && !anime ? "block" : "none";
+  if (inGame && anime) {
+    scene?.show(false);
+    const stage = document.getElementById("game-stage");
+    if (stage) {
+      const board = ensureAnimeBoard();
+      board.mount(stage);
+      board.show(true);
+      board.resize();
+    }
+  } else if (inGame) {
+    ensureScene().show(true);
+    animeBoard?.show(false);
+  } else {
+    scene?.show(false);
+    animeBoard?.show(false);
+  }
   render();
 }
 
@@ -183,6 +244,7 @@ function wireRail(el: HTMLElement): void {
 function renderHome(): void {
   const rawUrlRoom = new URLSearchParams(location.search).get("room") ?? "";
   const urlRoom = /^\d{2}$/.test(rawUrlRoom) ? rawUrlRoom : "";
+  const selectedLevel = loadLevel();
   app.innerHTML = "";
   const el = $(`
     <div class="screen" id="home">
@@ -212,6 +274,17 @@ function renderHome(): void {
             <label for="name">${t("name")}</label>
             <input id="name" maxlength="16" value="${escapeHtml(nameDefault())}" autocomplete="nickname" />
           </div>
+          <fieldset class="level-pick">
+            <legend>${t("level")}</legend>
+            <label class="level-option">
+              <input type="radio" name="level" value="1" ${selectedLevel === 1 ? "checked" : ""} />
+              <span>${t("level1")}</span>
+            </label>
+            <label class="level-option">
+              <input type="radio" name="level" value="2" ${selectedLevel === 2 ? "checked" : ""} />
+              <span>${t("level2")}</span>
+            </label>
+          </fieldset>
           <button id="btn-create" class="primary-action">${t("create")} <span aria-hidden="true">↗</span></button>
           <div class="join-group">
             <div class="field code-field">
@@ -231,6 +304,12 @@ function renderHome(): void {
 
   const getName = () =>
     (el.querySelector("#name") as HTMLInputElement).value.trim();
+  const getLevel = (): GameLevel => {
+    const picked = (
+      el.querySelector('input[name="level"]:checked') as HTMLInputElement | null
+    )?.value;
+    return picked === "1" ? 1 : 2;
+  };
   const codeInput = el.querySelector("#code") as HTMLInputElement;
   codeInput.addEventListener("input", () => {
     codeInput.value = codeInput.value.replace(/\D/g, "").slice(0, 2);
@@ -250,8 +329,10 @@ function renderHome(): void {
 
   el.querySelector("#btn-create")!.addEventListener("click", () =>
     go(() => {
+      const level = getLevel();
+      saveLevel(level);
       clearActiveSession();
-      net.send({ t: "createRoom", name: getName() });
+      net.send({ t: "createRoom", name: getName(), level });
     }),
   );
   el.querySelector("#btn-join")!.addEventListener("click", () =>
@@ -274,8 +355,10 @@ function renderHome(): void {
   );
   el.querySelector("#btn-practice")!.addEventListener("click", () =>
     go(() => {
+      const level = getLevel();
+      saveLevel(level);
       clearActiveSession();
-      net.send({ t: "createRoom", name: getName() });
+      net.send({ t: "createRoom", name: getName(), level });
       // start after welcome — flagged
       pendingPractice = true;
     }),
@@ -333,6 +416,7 @@ function renderLobby(): void {
             <small>${t("copyLink")} <b aria-hidden="true">↗</b></small>
           </button>
           <p class="waiting-copy"><strong>${t("waiting")}</strong> ${t("waitingHint")}</p>
+          <p class="level-badge">${room.level === 1 ? t("level1") : t("level2")} · ${t("levelLocked")}</p>
         </section>
 
         <section class="lobby-board">
@@ -403,6 +487,7 @@ function renderGame(): void {
   app.innerHTML = "";
   const canAnswer = room?.state === "ANSWER" && !ownLocked && !lockPending;
   const canEndMatch = room?.hostId === myId && room.state !== "LOBBY" && room.state !== "FINAL";
+  const levelLabel = isAnimeLevel() ? "ANIME TILE MAP" : "05 × 05 GRID";
   const el = $(`
     <div class="screen game-screen">
       ${renderRail(t("game"))}
@@ -412,7 +497,7 @@ function renderGame(): void {
           <div class="game-hud">
             <div class="phase-meta">
               <span>${t("round")} ${room?.round ?? 0} / ${room?.rounds ?? 7}</span>
-              <span>05 × 05 GRID</span>
+              <span>${levelLabel}</span>
             </div>
             <div class="phase-title" id="phase-title" aria-live="polite"></div>
             <div class="answer-timer hidden" id="answer-timer" role="timer" aria-live="off"><span>TIME</span><strong>00.0</strong></div>
@@ -454,7 +539,13 @@ function renderGame(): void {
   flip.set(optimisticCount, false);
   el.querySelector("#own-wrap")!.append(flip.el);
   updateOpponents();
-  ensureScene().resize();
+  if (isAnimeLevel()) {
+    const stage = el.querySelector("#game-stage") as HTMLElement;
+    ensureAnimeBoard().mount(stage);
+    ensureAnimeBoard().resize();
+  } else {
+    ensureScene().resize();
+  }
   setPhaseTitle(phaseText, phaseDigit);
 
   const minus = el.querySelector("#btn-minus") as HTMLButtonElement;
@@ -683,12 +774,12 @@ function render(): void {
 
 function scheduleFlash(): void {
   if (!pendingFlash || pendingFlash.grid.length === 0) return;
-  const { flashAt, holdMs, grid, round } = pendingFlash;
+  const { flashAt, holdMs, grid, round, seed, level } = pendingFlash;
   const localAt = clock.serverToLocal(flashAt);
   const version = phaseVersion;
   void (async () => {
     if (!(await waitUntil(localAt, version))) return;
-    await fireFlash(grid, holdMs, round, localAt, version);
+    await fireFlash(grid, holdMs, round, localAt, version, seed, level);
   })();
 }
 
@@ -698,6 +789,8 @@ async function fireFlash(
   _round: number,
   localAt: number,
   version: number,
+  seed: number,
+  level: GameLevel,
 ): Promise<void> {
   if (flashFired || version !== phaseVersion) return;
   flashFired = true;
@@ -719,6 +812,15 @@ async function fireFlash(
   }
 
   setPhaseTitle(t("remember"), "");
+  if (isAnimeLevel(level)) {
+    const board = ensureAnimeBoard();
+    const stage = document.getElementById("game-stage");
+    if (stage) board.mount(stage);
+    await board.animateSlideIn(grid, seed);
+    if (version !== phaseVersion || !(await sleep(holdMs, version))) return;
+    await board.animateVanish();
+    return;
+  }
   const sc = ensureScene();
   await sc.animateSlideIn(grid);
   if (version !== phaseVersion || !(await sleep(holdMs, version))) return;
@@ -740,9 +842,10 @@ function resumeFromMobileSuspension(): void {
   net.resume();
   if (pendingFlash && !flashFired) {
     const localAt = clock.serverToLocal(pendingFlash.flashAt);
-    if (now > localAt + 600 + pendingFlash.holdMs) {
+    if (now > localAt + (pendingFlash.level === 2 ? 2400 : 600) + pendingFlash.holdMs) {
       flashFired = true;
       ensureScene().clearCubes();
+      ensureAnimeBoard().clear();
       setPhaseTitle(t("missedFlash"), "");
     }
   }
@@ -757,6 +860,7 @@ function cancelPhaseWork(): void {
   phaseVersion++;
   stopAnswerTimer();
   scene?.cancelAnims();
+  animeBoard?.cancelAnims();
 }
 
 function resetRoundState(): void {
@@ -782,8 +886,11 @@ function beginRoundUi(
     flashAt: msg.flashAt,
     holdMs: msg.holdMs,
     round: msg.round,
+    seed: 0,
+    level: roomLevel(),
   };
   scene?.clearCubes();
+  animeBoard?.clear();
   if (room) room = { ...room, state: "COUNTDOWN", round: msg.round };
   setScreen("game");
   setPhaseTitle(t("remember"), "");
@@ -807,6 +914,7 @@ function enterAnswerUi(
 ): void {
   cancelPhaseWork();
   scene?.clearCubes();
+  animeBoard?.clear();
   pendingFlash = null;
   if (states) {
     counters = new Map(states.map((state) => [state.playerId, state.value]));
@@ -907,7 +1015,11 @@ function showRevealSnapshot(
   lastScores = reveal.scores;
   if (room) room = { ...room, state: phase, round: reveal.round };
   setScreen("game");
-  ensureScene().showReveal(reveal.grid);
+  if (isAnimeLevel()) {
+    ensureAnimeBoard().showReveal(reveal.grid, reveal.seed);
+  } else {
+    ensureScene().showReveal(reveal.grid);
+  }
   setPhaseTitle(
     phase === "REVEAL" ? t("question") : "",
     phase === "REVEAL" ? String(reveal.truth) : "",
@@ -940,6 +1052,7 @@ function applyPhaseSync(msg: PhaseSync): void {
       });
       if (msg.flash && pendingFlash) {
         pendingFlash.grid = msg.flash.grid;
+        pendingFlash.seed = msg.flash.seed;
         scheduleFlash();
       }
       break;
@@ -951,9 +1064,19 @@ function applyPhaseSync(msg: PhaseSync): void {
       pendingFlash = null;
       if (room) room = { ...room, state: "FLASH", round: msg.round };
       setScreen("game");
-      const visibleUntil = msg.flashAt + 600 + msg.holdMs;
-      if (msg.serverNow < visibleUntil) ensureScene().setGrid(msg.grid, true);
-      else ensureScene().clearCubes();
+      const visibleUntil = msg.flashAt + (roomLevel() === 2 ? 2400 : 600) + msg.holdMs;
+      if (msg.serverNow < visibleUntil) {
+        if (isAnimeLevel()) {
+          const stage = document.getElementById("game-stage");
+          if (stage) ensureAnimeBoard().mount(stage);
+          ensureAnimeBoard().setGrid(msg.grid, msg.seed, true);
+        } else {
+          ensureScene().setGrid(msg.grid, true);
+        }
+      } else {
+        ensureScene().clearCubes();
+        ensureAnimeBoard().clear();
+      }
       setPhaseTitle(t("remember"), "");
       break;
     }
@@ -1052,6 +1175,8 @@ net.onMessage((msg: S2C) => {
     case "flashData":
       if (pendingFlash && pendingFlash.round === msg.round) {
         pendingFlash.grid = msg.grid;
+        pendingFlash.seed = msg.seed;
+        pendingFlash.level = msg.level;
         scheduleFlash();
       }
       break;
@@ -1226,11 +1351,20 @@ async function handleReveal(
   updateOpponents(msg.results);
 
   const sc = ensureScene();
-  await sc.animateReveal(msg.grid, msg.order, (filled) => {
-    if (version !== phaseVersion) return;
-    sfx.reveal();
-    setPhaseTitle(t("question"), String(filled));
-  });
+  const board = ensureAnimeBoard();
+  if (isAnimeLevel()) {
+    await board.animateReveal(msg.grid, msg.seed, msg.order, (filled) => {
+      if (version !== phaseVersion) return;
+      sfx.reveal();
+      setPhaseTitle(t("question"), String(filled));
+    });
+  } else {
+    await sc.animateReveal(msg.grid, msg.order, (filled) => {
+      if (version !== phaseVersion) return;
+      sfx.reveal();
+      setPhaseTitle(t("question"), String(filled));
+    });
+  }
   if (version !== phaseVersion) return;
 
   // Show outcome toast for self

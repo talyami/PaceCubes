@@ -4,16 +4,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
+  ROOM_CODE_CAPACITY,
   VERSION,
   type C2S,
   type S2C,
+  parseGameLevel,
 } from "@yamicuberush/shared";
 import { Analytics } from "./analytics.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { log } from "./log.js";
 import { sanitizeName } from "./player.js";
 import { RoomManager } from "./roomManager.js";
-
 export interface AppOptions {
   port?: number;
   host?: string;
@@ -35,7 +36,10 @@ export interface App {
 export async function createApp(opts: AppOptions = {}): Promise<App> {
   const PORT = opts.port ?? Number(process.env.PORT ?? 8081);
   const HOST = opts.host ?? process.env.HOST ?? "127.0.0.1";
-  const MAX_ROOMS = opts.maxRooms ?? Number(process.env.MAX_ROOMS ?? 200);
+  const configuredMaxRooms = opts.maxRooms ?? Number(process.env.MAX_ROOMS ?? ROOM_CODE_CAPACITY);
+  const MAX_ROOMS = Number.isFinite(configuredMaxRooms)
+    ? Math.max(1, Math.min(Math.floor(configuredMaxRooms), ROOM_CODE_CAPACITY))
+    : ROOM_CODE_CAPACITY;
   const MAX_SOCKETS = opts.maxSockets ?? Number(process.env.MAX_SOCKETS ?? 600);
   const ORIGIN_ALLOW =
     opts.originAllow ??
@@ -227,7 +231,8 @@ export async function createApp(opts: AppOptions = {}): Promise<App> {
             send(ws, { t: "error", code: "BAD_NAME", msg: "Invalid nickname" });
             return;
           }
-          const created = rooms.create(meta.ip);
+          const level = parseGameLevel(msg.level) ?? 2;
+          const created = rooms.create(meta.ip, level);
           if ("error" in created) {
             send(ws, {
               t: "error",

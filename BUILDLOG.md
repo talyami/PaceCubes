@@ -77,3 +77,33 @@ npm run dev    # http://127.0.0.1:5173 + ws://127.0.0.1:8081/ws
 ```
 
 `/healthz` smoke: `{"ok":true,"version":"1.0.0",...}`
+
+## M6 Levels and current technical release — done (2026-07-12)
+
+### Shared protocol and deterministic generation
+- Added `GameLevel` (`1 | 2`) to room creation, snapshots, flash messages, and reveal state.
+- Added level-specific difficulty tables. Level 1 grids are binary and capped at the 25-cell board capacity; Level 2 retains stacked heights up to three.
+- Added seeded portrait selection so every client renders the same portrait in each occupied coordinate.
+
+### Level 1 renderer
+- Added `AnimeBoard` DOM renderer and canvas-generated `AnimePortraits` asset system.
+- Portrait pool expanded from 12 palette swaps to 36 original variations in three silhouette/style families with varied backgrounds and accessories.
+- Explicit CSS Grid coordinates preserve server-generated scattering rather than implicitly packing occupied cells.
+- Added perspective board treatment, dimensional cards, reveal elevation, and safe-stage sizing around HUD/notification areas.
+- Fixed flash visibility so cards are shown during counting, not only during results.
+
+### Level 2 motion
+- Preserved the Three.js instanced-cube renderer and original gameplay.
+- Increased cube slide-in duration from 600 ms to 2,400 ms (4x). Updated suspension/resume visibility windows to match.
+
+### Server and capacity
+- Rooms persist their selected level and broadcast it authoritatively.
+- Corrected `MAX_ROOMS`: two-digit room codes provide exactly 100 unique codes. Default is now 100; startup normalizes finite values to integer range 1..100. Removed the hidden manager-side `Math.min(maxRooms, 100)` mismatch.
+- Deployment environment example and BRD runtime environment documentation now use `MAX_ROOMS=100`.
+
+### Tests and release verification
+- Added level parsing, binary-grid invariants, deterministic portrait bounds, and Level 1 integration coverage.
+- Current suite: 8 files / 23 tests.
+- Client gzip bundle remains within the 500 KB budget (approximately 134.6 KB at this release).
+- Production topology: OpenLiteSpeed static frontend at `/home/villa.linkflow.page/public_html/yamicuberush/`; systemd backend at `/opt/yamicuberush/server.js`, internal port 8091; public WebSocket path `/yamicuberush/ws`.
+- Browser acceptance tests are intentionally left to the owner; automated CI and endpoint smoke checks do not replace visual gameplay acceptance.

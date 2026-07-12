@@ -425,7 +425,7 @@ After each flash, client computes `skew = actualFireLocal − localFlashAt` and 
 ## B·9 Server & Client Design Detail
 
 ### 9.1 Server bootstrap (`index.ts`)
-- `http.createServer` (serves nothing but `/healthz` → `200 {rooms, sockets, uptime}`) + `ws.Server({ noServer })` bound via `upgrade` on path `/ws`; listen `127.0.0.1:8081` (Nginx fronts it). Env: `PORT`, `HOST`, `MAX_ROOMS=200`, `MAX_SOCKETS=600`, `ANALYTICS_WEBHOOK_URL?`, `ORIGIN_ALLOW` (comma list; empty = allow all, log origin).
+- `http.createServer` (serves nothing but `/healthz` → `200 {rooms, sockets, uptime}`) + `ws.Server({ noServer })` bound via `upgrade` on path `/ws`; listen `127.0.0.1:8081` (Nginx fronts it). Env: `PORT`, `HOST`, `MAX_ROOMS=100`, `MAX_SOCKETS=600`, `ANALYTICS_WEBHOOK_URL?`, `ORIGIN_ALLOW` (comma list; empty = allow all, log origin).
 - Graceful shutdown: SIGTERM → stop accepting, `matchEnd`-less `error{SERVER_RESTART}`… keep simple: close sockets with code 1012; clients auto-reconnect and land on a room-not-found → home screen. Document this in README.
 
 ### 9.2 Room FSM (`room.ts`)

@@ -31,21 +31,21 @@ export class RoomManager {
     this.gcTimer = setInterval(() => this.gc(), 10_000);
   }
 
-  create(ip: string): Room | { error: string } {
+  create(ip: string, level: 1 | 2 = 2): Room | { error: string } {
     const win =
       this.ipCreates.get(ip) ??
       new SlidingWindow(RATE.roomCreatePerIp.windowMs, RATE.roomCreatePerIp.max);
     this.ipCreates.set(ip, win);
     if (!win.tryTake()) return { error: "RATE_LIMITED" };
-    if (this.rooms.size >= Math.min(this.maxRooms, 100))
+    if (this.rooms.size >= this.maxRooms)
       return { error: "SERVER_FULL" };
 
     const code = genCode(new Set(this.rooms.keys()));
-    const room = new Room(code, this.analytics, {
+    const room = new Room(code, level, this.analytics, {
       onEmpty: (c) => this.scheduleDestroy(c),
     });
     this.rooms.set(code, room);
-    this.analytics.track("room_created", { players: 0 }, code);
+    this.analytics.track("room_created", { players: 0, level }, code);
     log.info("room_created", { room: code });
     return room;
   }

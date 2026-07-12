@@ -27,6 +27,7 @@ import {
   sumGrid,
   type C2S,
   type Grid,
+  type GameLevel,
   type RevealState,
   type RoomSnapshot,
   type RoomState,
@@ -49,6 +50,7 @@ export class Room {
   round = 0;
   rounds = MATCH_ROUNDS;
   hideOpponentCount = true;
+  readonly level: GameLevel;
   createdAt = Date.now();
   lastActivity = Date.now();
 
@@ -79,10 +81,12 @@ export class Room {
 
   constructor(
     code: string,
+    level: GameLevel,
     private readonly analytics: Analytics,
     private readonly cbs: RoomCallbacks,
   ) {
     this.code = code;
+    this.level = level;
   }
 
   touch(): void {
@@ -100,6 +104,7 @@ export class Room {
       round: this.round,
       rounds: this.rounds,
       hideOpponentCount: this.hideOpponentCount,
+      level: this.level,
     };
   }
 
@@ -353,7 +358,7 @@ export class Room {
   private beginRound(round: number): void {
     if (this.destroyed) return;
     this.round = round;
-    const diff = difficultyForRound(Math.min(round, 7));
+    const diff = difficultyForRound(Math.min(round, 7), this.level);
     this.seed = randomInt(1, 0x7fffffff);
     const target = pickTargetCubes(this.seed, diff.minCubes, diff.maxCubes);
     this.grid = generateGrid(this.seed, target, diff.maxHeight);
@@ -394,6 +399,7 @@ export class Room {
         round,
         grid: this.grid,
         seed: this.seed,
+        level: this.level,
       });
       this.setPhase("COUNTDOWN", this.flashAt, () => {
         this.state = "FLASH";
@@ -589,6 +595,7 @@ export class Room {
       round: this.round,
       grid: this.grid,
       truth: this.truth,
+      seed: this.seed,
       order,
       results,
       scores,

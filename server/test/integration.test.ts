@@ -84,7 +84,7 @@ describe("integration: full match", () => {
     await a.connect();
     await b.connect();
 
-    a.send({ t: "createRoom", name: "Alice" });
+    a.send({ t: "createRoom", name: "Alice", level: 2 });
     const welcomeA = await a.waitFor("welcome");
     const code = welcomeA.room.code;
     expect(code).toMatch(/^\d{2}$/);
@@ -188,7 +188,7 @@ describe("integration: full match", () => {
     await a.connect();
     await b.connect();
 
-    a.send({ t: "createRoom", name: "Host" });
+    a.send({ t: "createRoom", name: "Host", level: 2 });
     const w = await a.waitFor("welcome");
     b.send({ t: "joinRoom", code: w.room.code, name: "Guest" });
     await b.waitFor("welcome");
@@ -258,7 +258,7 @@ describe("integration: full match", () => {
     const guest = new TestClient(url);
     await host.connect();
     await guest.connect();
-    host.send({ t: "createRoom", name: "Host" });
+    host.send({ t: "createRoom", name: "Host", level: 2 });
     const welcome = await host.waitFor("welcome");
     expect(welcome.room.code).toMatch(/^\d{2}$/);
     guest.send({ t: "joinRoom", code: welcome.room.code, name: "Guest" });
@@ -309,4 +309,31 @@ describe("integration: full match", () => {
 
     host.close();
   }, 120_000);
+
+  it("level 1 rooms use flat anime grids capped at 25 tiles", async () => {
+    const host = new TestClient(url);
+    await host.connect();
+    host.send({ t: "createRoom", name: "AnimeHost", level: 1 });
+    const welcome = await host.waitFor("welcome");
+    expect(welcome.room.level).toBe(1);
+
+    host.send({ t: "startMatch" });
+    await host.waitFor("matchStart", 10_000);
+    await host.waitFor("roundIntro", 30_000);
+    const flash = await host.waitFor("flashData", 30_000);
+    expect(flash.level).toBe(1);
+    const truth = flash.grid.flat().reduce((sum, cell) => sum + cell, 0);
+    expect(truth).toBeGreaterThan(0);
+    expect(truth).toBeLessThanOrEqual(25);
+    for (const row of flash.grid) {
+      for (const cell of row) {
+        expect(cell).toBeGreaterThanOrEqual(0);
+        expect(cell).toBeLessThanOrEqual(1);
+      }
+    }
+
+    host.send({ t: "endMatch" });
+    await host.waitFor("matchEnd", 10_000);
+    host.close();
+  }, 60_000);
 });

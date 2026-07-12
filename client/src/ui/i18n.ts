@@ -54,6 +54,10 @@ const STRINGS = {
   player: "Player",
   score: "Score",
   matchLedger: "Match ledger",
+  level: "Level",
+  level1: "Level 1 — Anime tiles",
+  level2: "Level 2 — Cube stacks",
+  levelLocked: "Level locked for this room",
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

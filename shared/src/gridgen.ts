@@ -1,4 +1,4 @@
-import { GRID_SIZE } from "./constants.js";
+import { GRID_SIZE, ANIME_PORTRAIT_COUNT } from "./constants.js";
 import type { Grid } from "./protocol.js";
 
 /** Mulberry32 PRNG — deterministic for a given seed. */
@@ -128,4 +128,10 @@ export function pickTargetCubes(
 ): number {
   const rng = mulberry32(seed ^ 0x9e3779b9);
   return minCubes + Math.floor(rng() * (maxCubes - minCubes + 1));
+}
+
+/** Deterministic portrait pick for level-1 occupied cells. */
+export function portraitIndex(seed: number, x: number, y: number): number {
+  const rng = mulberry32(seed ^ (x * GRID_SIZE + y) ^ 0x51ed270b);
+  return Math.floor(rng() * ANIME_PORTRAIT_COUNT);
 }

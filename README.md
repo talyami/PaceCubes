@@ -15,6 +15,8 @@ npm run dev
 
 Open two tabs â†’ Create room / Join with code, or **Practice solo**.
 
+**Levels:** choose **Level 1** (flat anime portrait tiles on the map) or **Level 2** (classic stacked cubes) when creating a room or starting solo practice. The level is fixed for that room.
+
 ```bash
 npm run ci      # typecheck + tests + build + bundle budget
 npm test
@@ -75,3 +77,16 @@ See `shared/src/protocol.ts` and BRD Â§ 7.
 ## License
 
 Private â€” owner project.
+
+## Current release (2026-07-12)
+
+### Gameplay levels
+- Hosts choose the level when creating a multiplayer room or solo-practice room; the choice is locked for that room.
+- **Level 1 — Anime Portraits:** deterministic binary 5x5 maps containing scattered original portrait cards. The client has 36 generated variations across multiple silhouettes, palettes, accessories, and backgrounds. Cards use a raised perspective presentation and remain visible during the memory flash.
+- **Level 2 — Classic Cubes:** original stacked-cube rules and difficulty. Cube entrance motion is intentionally slowed to 2.4 seconds (4x the original 600 ms); hold and vanish timing are otherwise unchanged.
+
+### Room capacity
+Room codes are two decimal digits (`00`-`99`), giving a hard capacity of 100 simultaneous rooms. `MAX_ROOMS` defaults to 100 and is clamped to the supported range `1..100`. `MAX_SOCKETS` remains separately configurable (default 600).
+
+### Validation
+`npm run ci` runs shared compilation, server/client type checking, 23 unit/integration tests, production builds, and bundle-budget validation. Browser acceptance testing is performed manually by the owner.

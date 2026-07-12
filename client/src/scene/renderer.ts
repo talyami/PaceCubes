@@ -198,7 +198,7 @@ export class GameScene {
   }
 
   /**
-   * Slide-in from nearest screen edge, 0.6s + 40ms stagger by x+y.
+   * Slide-in from nearest screen edge, 2.4s + 40ms stagger by x+y.
    */
   async animateSlideIn(grid: number[][]): Promise<void> {
     this.setGrid(grid, false);
@@ -209,7 +209,7 @@ export class GameScene {
       return;
     }
 
-    const duration = 600;
+    const duration = 2400;
     const stagger = 40;
     const start = performance.now();
     const starts: number[] = this.instanceMeta.map(

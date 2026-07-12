@@ -49,7 +49,7 @@ const req = https.request(
 
 req.on("upgrade", (_res, socket) => {
   socket.write(
-    encodeClientText(JSON.stringify({ t: "createRoom", name: "Smoke" })),
+    encodeClientText(JSON.stringify({ t: "createRoom", name: "Smoke", level: 2 })),
   );
   socket.on("data", (buf) => {
     const text = decodeServerText(buf);
